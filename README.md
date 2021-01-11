@@ -18,7 +18,7 @@ yarn install --save client-http-keypair-authorization-headers
 
 Browser file can be found in `dist.browser/index.js`
 
-```
+```html
 <script src="/path/to/index.js"></script>
 ```
 
