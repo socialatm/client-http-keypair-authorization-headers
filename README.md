@@ -1,6 +1,6 @@
 # HTTP Cavage public key / private key authorization headers for authorizations
 
-This Django module was created to give "Cavage" HTTP Signatures capabilities to the Django Rest Framework.
+This JavaScript module was created to give "Cavage" HTTP Signatures capabilities AJAX and REST API requests.
 
 This enables HTTP authorization based on public key/private key encryption as an alternative to session cookies or API tokens.
 
