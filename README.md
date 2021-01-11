@@ -1,6 +1,14 @@
 # HTTP Cavage public key / private key authorization headers for authorizations
 
-## Intsallation
+This Django module was created to give "Cavage" HTTP Signatures capabilities to the Django Rest Framework.
+
+This enables HTTP authorization based on public key/private key encryption as an alternative to session cookies or API tokens.
+
+For more information see [Draft Cavage HTTP Signatures 12](https://tools.ietf.org/html/draft-cavage-http-signatures-12)
+
+Using [Django Rest Framework](https://www.django-rest-framework.org/) on the server? Try the [DRF Keypair authorization header library](https://pypi.org/project/drf-keypair-permissions/).
+
+## Installation
 
 **NPM:**
 
