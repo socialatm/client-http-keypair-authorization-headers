@@ -36,7 +36,7 @@ describe('Passphrase', () => {
       passphrase.should.exist;
     });
     it('passphrases should be a string', () => {
-      const passphraseType = typeof(passphrase);
+      const passphraseType: string = typeof(passphrase);
       passphraseType.should.equal('string');
     });
     it('passphrases should be of length `.defaultPassphraseLength`', () => {
@@ -159,7 +159,7 @@ describe('Signing messages', () => {
     ];
     const signingMessage: string = authorizer.createSigningMessage(httpRequest, authorizationParameters, requiredAuthorizationHeaders);
     it('message verifies', () => {
-      const expectedSigningMessage = `(request-target): get /foo?param=value&pet=dog
+      const expectedSigningMessage: string = `(request-target): get /foo?param=value&pet=dog
 host: example.com
 date: Mon, 11 Jan 2021 20:54:32 GMT`;
       signingMessage.should.equal(expectedSigningMessage);
@@ -198,7 +198,7 @@ date: Mon, 11 Jan 2021 20:54:32 GMT`;
     ];
     const signingMessage: string = authorizer.createSigningMessage(httpRequest, authorizationParameters, requiredAuthorizationHeaders);
     it('message verifies', () => {
-      const expectedSigningMessage = `(request-target): get /foo?param=value&pet=dog
+      const expectedSigningMessage: string = `(request-target): get /foo?param=value&pet=dog
 (created): ${createdTimestamp}
 (expires): ${expiresTimestamp}
 host: example.com
@@ -351,7 +351,7 @@ describe('Message signatures', () => {
   });
   const keyId: string = 'keyId';
   const httpBody: string = '{"hello": "world"}';
-  const hashAlgorithm = 'SHA256';
+  const hashAlgorithm: string = 'SHA256';
   describe('Signature creation', () => {
     const httpRequest: typeof HttpHeaders = {
       method: HttpMethod.Get,
@@ -386,11 +386,11 @@ describe('Message signatures', () => {
       requiredAuthorizationHeaders
     );
     it('signature is a string', () => {
-      const messageSignatureType = typeof(messageSignature);
+      const messageSignatureType: string = typeof(messageSignature);
       messageSignatureType.should.equal('string');
     });
     it('signature is valid', () => {
-      const expectedSignature = 'BCekw5snRmcyEnpWLFiKKFXBXG8miig5EhvQs9Da6mLedOOzrnt+1u5OViFgFn2tqGEHgCdDNebp/+AWQFVpUSO1NpUDmYkvw0IHQNH6JBgKEn6AsyiWEV/SK48ZHElwYU8yjVH3ZBwCPYgkVAIldyDJrSHCKNY8AlayC+OwZwm05Zm/oJkobbyU/j5v27VmfyE1NJ7YnZjssuQmIN67wkKcwkGyHTh4fCQcmBQo4YbfjOHVL/vX7zabmEiWLfGbdNVCq9oN+gAP7dDeQxM5KOW4v/HTH1MP3eFYZoWRZitOlNFBHIBRa0KKqnWB43oM7IN1jSrmgIgcx64UxvSJPrjX4JKygFlaqXgKD8EBYqEU85mf1XGIWvzfP3stsDfuL5XxG8bDg41EnshBgkYYXbdgUeQ4sSoQiGvT8IX2JbZrohQdmGFK4pTa/IqyVjMzzV5DUKIL62WOOfjb9JaZ8ttc+RxCT9DS+Qm9UWM7l1yBlrUztEKJ3iM+CGRL1HP3i92hA63IVfOqnud7dGppIEVygfMwEtlpENvSZBT6KyPuyDXRB59x9yuwCZvlAe9RYv/5XlV2JCgewstYpJU4kyiPX3Z5BxrRwApZT9c6IjEfA2wVm1pipnzCAJe90QNoJ4fBc11EIPd8wTKHxOo2KLqVAGsZAAqAvLGTXZvXPqg='
+      const expectedSignature: string = 'BCekw5snRmcyEnpWLFiKKFXBXG8miig5EhvQs9Da6mLedOOzrnt+1u5OViFgFn2tqGEHgCdDNebp/+AWQFVpUSO1NpUDmYkvw0IHQNH6JBgKEn6AsyiWEV/SK48ZHElwYU8yjVH3ZBwCPYgkVAIldyDJrSHCKNY8AlayC+OwZwm05Zm/oJkobbyU/j5v27VmfyE1NJ7YnZjssuQmIN67wkKcwkGyHTh4fCQcmBQo4YbfjOHVL/vX7zabmEiWLfGbdNVCq9oN+gAP7dDeQxM5KOW4v/HTH1MP3eFYZoWRZitOlNFBHIBRa0KKqnWB43oM7IN1jSrmgIgcx64UxvSJPrjX4JKygFlaqXgKD8EBYqEU85mf1XGIWvzfP3stsDfuL5XxG8bDg41EnshBgkYYXbdgUeQ4sSoQiGvT8IX2JbZrohQdmGFK4pTa/IqyVjMzzV5DUKIL62WOOfjb9JaZ8ttc+RxCT9DS+Qm9UWM7l1yBlrUztEKJ3iM+CGRL1HP3i92hA63IVfOqnud7dGppIEVygfMwEtlpENvSZBT6KyPuyDXRB59x9yuwCZvlAe9RYv/5XlV2JCgewstYpJU4kyiPX3Z5BxrRwApZT9c6IjEfA2wVm1pipnzCAJe90QNoJ4fBc11EIPd8wTKHxOo2KLqVAGsZAAqAvLGTXZvXPqg='
       messageSignature.should.equal(expectedSignature)
     });
   });
@@ -588,7 +588,7 @@ describe('Message signatures', () => {
         },
         body: httpBody
       };
-      const staticHeader = 'Signature algorithm="SHA256",keyId="keyId",signature="wGSJE1xujF5WpDyfcOOBCwmgeFV9o6vGwLljc9wcsGUiI2uyHDQN/2CI+YleFT2sR+znOb1imEjJ/QjGxZwGR1IaeHu4x/+eJUVeerCAlQqW7LJDVdsaW9P2A+T+L5Ev6Vcn4CA+Kv/gdulYhUl+uQ2ZcusMMMQjInq7d+DbyM4MNC+GK+TJpbpzJoVAOu6L7A5B02nJ8Nezz5bwo39iavRXCtekk7j7x+j7KwXyCTSKUcvX9ext6+IByrlaGFXGzmUc94WtYBSVfu1rh0gWQdUeklfIq4KlFQjQQAEpQJSbY2OWVpWT0o12NPC3heaFT7l7viy+g/+5/273nJjZCxjGUBbMZkb1Sc96LWVL23hhr5rYZ3CjVc+Q1OVi/uSkATrR3Ovl1y5kfjgw/QrB4OQ9oT+u4hU//1Pqindp1mOwnlJXG2HObl+vBfgxrKd31eJ2q1uXfjSd0rrWpfAoWxBF2lcmp4eLBQpWTe9m4h/EWhacxRhAYvefkszpA4HY5rNUYTECbjK5NPMYJ2fe5nBTAAQkvg3O3+aRm6KQLU2LPlfxKDCHN9vLwD2DWYzY78ndEX4cPvA6NevBlE7ZUcfnCwxmKwQpeU6hJs980RNjSFfG3MZxQJxfBn5N4K5qGzjcwDpGRKmCY79NnOEfu0MJtSFSKZszVOcEwr9/Tck=",created=1610398006,expires=1610570806,headers="(request-target) (created) (expires) host date content-type content-length"';
+      const staticHeader: string = 'Signature algorithm="SHA256",keyId="keyId",signature="wGSJE1xujF5WpDyfcOOBCwmgeFV9o6vGwLljc9wcsGUiI2uyHDQN/2CI+YleFT2sR+znOb1imEjJ/QjGxZwGR1IaeHu4x/+eJUVeerCAlQqW7LJDVdsaW9P2A+T+L5Ev6Vcn4CA+Kv/gdulYhUl+uQ2ZcusMMMQjInq7d+DbyM4MNC+GK+TJpbpzJoVAOu6L7A5B02nJ8Nezz5bwo39iavRXCtekk7j7x+j7KwXyCTSKUcvX9ext6+IByrlaGFXGzmUc94WtYBSVfu1rh0gWQdUeklfIq4KlFQjQQAEpQJSbY2OWVpWT0o12NPC3heaFT7l7viy+g/+5/273nJjZCxjGUBbMZkb1Sc96LWVL23hhr5rYZ3CjVc+Q1OVi/uSkATrR3Ovl1y5kfjgw/QrB4OQ9oT+u4hU//1Pqindp1mOwnlJXG2HObl+vBfgxrKd31eJ2q1uXfjSd0rrWpfAoWxBF2lcmp4eLBQpWTe9m4h/EWhacxRhAYvefkszpA4HY5rNUYTECbjK5NPMYJ2fe5nBTAAQkvg3O3+aRm6KQLU2LPlfxKDCHN9vLwD2DWYzY78ndEX4cPvA6NevBlE7ZUcfnCwxmKwQpeU6hJs980RNjSFfG3MZxQJxfBn5N4K5qGzjcwDpGRKmCY79NnOEfu0MJtSFSKZszVOcEwr9/Tck=",created=1610398006,expires=1610570806,headers="(request-target) (created) (expires) host date content-type content-length"';
       const doesVerify: string = authorizer.doesSignatureHeaderVerify(
         staticHeader,
         httpRequest,
