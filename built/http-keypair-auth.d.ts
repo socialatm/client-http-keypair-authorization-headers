@@ -18,7 +18,7 @@ export interface HttpRequest {
     headers: HttpHeaders;
     body: string;
 }
-export declare class HttpKeyPairAuthorizator {
+export default class HttpKeyPairAuthorizer {
     modulusLength: number;
     publicKeyType: string;
     privateKeyType: string;
@@ -30,8 +30,14 @@ export declare class HttpKeyPairAuthorizator {
     get privateKeyPassphrase(): string;
     set privateKeyPassphrase(passphrase: string);
     generatePrivateKeyPassphrase(length?: number): string;
+    createSigningMessage(httpRequest: HttpRequest, authorizationParameters?: Record<string, any>, requiredAuthorizationHeaders?: string[]): string;
     createMessageSignature(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, hashAlgorithm: string, authorizationParameters: Record<string, any>, requiredAuthorizationHeaders?: string[]): string;
     createAuthorizationHeader(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, keyId: string, hashAlgorithm: string, authorizationParameters: Record<string, any>, requiredAuthorizationHeaders: string[]): string;
     createDigestHeader(text: string, hashAlgorithm: string): string;
+    doesDigestVerify(text: string, digest: string): boolean;
+    doesSignatureHeaderVerify(header: string, httpRequest: HttpRequest, publicKey: typeof crypto.PublicKeyObject): boolean;
+    doesHttpRequestVerify(httpRequest: HttpRequest, publicKey: typeof crypto.PublicKeyObject): boolean;
+    getAuthorizationParametersFromSignatureHeader(signatureHeader: string): Record<string, any>;
+    __getRequestTarget(httpRequest: HttpRequest): string;
 }
 export {};

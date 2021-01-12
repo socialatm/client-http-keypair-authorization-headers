@@ -3,13 +3,34 @@ export {}
 const crypto = require('crypto');
 const { PublicKeyObject, PrivateKeyObject } = require('crypto')
 const assert = require('assert')
-var should = require('chai').should();
-const { HttpKeyPairAuthorizator, HttpMethod, HttpHeaders, HttpRequest } = require('../src/index');
-//import { HttpKeyPairAuthorizator, HttpMethod, HttpHeaders, HttpRequest } from '../src/index';
+const chai = require('chai');
+const should = require('chai').should();
+const expect = require('chai').expect;
+const { HttpMethod, HttpHeaders, HttpRequest } = require('../src/http-keypair-auth');
+const HttpKeyPairAuthorizer = require('../src/http-keypair-auth').default;
+//import { HttpKeyPairAuthorizer, HttpMethod, HttpHeaders, HttpRequest } from '../src/index';
+const deepEqualInAnyOrder = require('deep-equal-in-any-order');
+chai.use(deepEqualInAnyOrder);
+
+
+const authorizer: typeof HttpKeyPairAuthorizer = new HttpKeyPairAuthorizer();
+
+describe('Gets (request-target) from HttpRequest', () => {
+  const httpRequest: typeof HttpHeaders = {
+    method: HttpMethod.Get,
+    path: '/foo?param=value&pet=dog',
+    headers: {},
+    body: ""
+  };
+  const expectedRequestTarget: string = 'get /foo?param=value&pet=dog';
+  it('Can create a (request-target) from HttpRequest', () => {
+    const requestTarget: string = authorizer.__getRequestTarget(httpRequest);
+    requestTarget.should.equal(expectedRequestTarget);
+  });
+});
 
 describe('Passphrase', () => {
   describe('Generate passphrase:', () => {
-    const authorizer: typeof HttpKeyPairAuthorizator = new HttpKeyPairAuthorizator();
     const passphrase: string = authorizer.generatePrivateKeyPassphrase();
     it('passphrases should exist', () => {
       passphrase.should.exist;
@@ -23,7 +44,7 @@ describe('Passphrase', () => {
     });
   })
   describe('Save passphrase:', () => {
-    const authorizer: typeof HttpKeyPairAuthorizator = new HttpKeyPairAuthorizator();
+    const authorizer: typeof HttpKeyPairAuthorizer = new HttpKeyPairAuthorizer();
     it ('can store a passphrase', () => {
       const passphrase: string = authorizer.generatePrivateKeyPassphrase();
       authorizer.privateKeyPassphrase = passphrase;
@@ -37,7 +58,7 @@ describe('Passphrase', () => {
 /*
 describe('Keypairs', () => {
   describe('Can generate keypairs', () => {
-    const authorizer: typeof HttpKeyPairAuthorizator = new HttpKeyPairAuthorizator();
+    const authorizer: typeof HttpKeyPairAuthorizer = new HttpKeyPairAuthorizer();
     const keypair: typeof KeyPair = authorizer.generateKeyPair('rsa')
     it('public key exists', () => {
       const publicKeyType = typeof(keypair.publicKey);
@@ -52,37 +73,200 @@ describe('Keypairs', () => {
 /* */
 
 describe('Digests', () => {
-    const authorizer: typeof HttpKeyPairAuthorizator = new HttpKeyPairAuthorizator();
-    // const keypair: KeyPair = authorizer.generateKeyPair('rsa')
+    const authorizer: typeof HttpKeyPairAuthorizer = new HttpKeyPairAuthorizer();
+    const staticDigestHeader: string = 'SHA256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=';
     const httpBody: string = '{"hello": "world"}';
-    describe(`Can generate digests`, () => {
+    describe(`Can create a digest from a HttpRequest body`, () => {
       const hashAlgorithm: string = 'SHA256';
       const digest: string = authorizer.createDigestHeader(httpBody, hashAlgorithm);
       it(`Generates valid ${hashAlgorithm} hash`, () => {
-        digest.should.equal('SHA256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=')
+        digest.should.equal(staticDigestHeader)
+      });
+    });
+    describe(`Verifies digests`, () => {
+      const goodDigest: string = authorizer.doesDigestVerify(httpBody, staticDigestHeader);
+      it(`Matching digests return true`, () => {
+        goodDigest.should.be.true;
+      });
+      const alteredHttpBody: string = '{"goodbye": "world"}';
+      const badDigest: string = authorizer.doesDigestVerify(alteredHttpBody, staticDigestHeader);
+      it(`Mismatched digest returns false`, () => {
+        badDigest.should.be.false;
       });
     });
 });
 
 
-describe('Message signature', () => {
-  const authorizer: typeof HttpKeyPairAuthorizator = new HttpKeyPairAuthorizator();
-  // const keypair: typeof KeyPair = authorizer.generateKeyPair('rsa')
-  /*
-  const keyPair: typeof KeyPair = crypto.generateKeyPairSync('rsa', {
-    modulusLength: 2048,
-    publicKeyEncoding: {
-      type: this.publicKeyType,
-      format: 'der'
-    },
-    privateKeyEncoding: {
-      type: this.privateKeyType,
-      format: 'der',
-      cipher: this.privateKeyCipher,
-      passphrase: this.privateKeyPassphrase
-    }
+describe('Signing messages', () => {
+  describe('Throws error if no "date" header', () => {
+    const httpBody: string = '{"hello": "world"}';
+    const httpRequest: typeof HttpHeaders = {
+      method: HttpMethod.Get,
+      path: '/foo?param=value&pet=dog',
+      headers: {},
+      body: httpBody
+    };
+    const authorizationParameters: Record<string,any> = {};
+    const requiredAuthorizationHeaders: string[] = [];
+    it('Error thrown', () => {
+      expect(() => {
+        authorizer.createSigningMessage(
+          httpRequest
+        )
+      }).to.throw(Error, 'Date');
+    });
   });
-  /* */
+  describe('Can create a "default" singing message from HttpRequest', () => {
+    const httpBody: string = '{"hello": "world"}';
+    const httpRequest: typeof HttpHeaders = {
+      method: HttpMethod.Get,
+      path: '/foo?param=value&pet=dog',
+      headers: {
+        Date: 'Mon, 11 Jan 2021 20:54:32 GMT', // (new Date()).toUTCString(),
+      },
+      body: httpBody
+    };
+    const authorizationParameters: null = null;
+    const requiredAuthorizationHeaders: string[] = [];
+    const signingMessage: string = authorizer.createSigningMessage(httpRequest, authorizationParameters, requiredAuthorizationHeaders);
+    it('message verifies', () => {
+      const expectedSigningMessage = `date: Mon, 11 Jan 2021 20:54:32 GMT`
+      signingMessage.should.equal(expectedSigningMessage);
+    });
+  });
+  describe('Can create a "basic" singing message HttpRequest', () => {
+    const httpBody: string = '{"hello": "world"}';
+    const httpRequest: typeof HttpHeaders = {
+      method: HttpMethod.Get,
+      path: '/foo?param=value&pet=dog',
+      headers: {
+        'Host': 'example.com',
+        'Date': 'Mon, 11 Jan 2021 20:54:32 GMT', // (new Date()).toUTCString(),
+        'Content-Type': 'application/json; encoding=utf-8',
+        'Accept': 'application/json',
+        'Content-Length': httpBody.length * 2
+      },
+      body: httpBody
+    };
+    const authorizationParameters: Record<string,any> = {
+      created: 1610312072, // Math.floor(Date.now() / 1000) - (60 * 60 * 24),
+      expires: 1610484872 // Math.floor(Date.now() / 1000) + (60 * 60 * 24)
+    };
+    const requiredAuthorizationHeaders: string[] = [
+      '(request-target)',
+      'host',
+      'date',
+    ];
+    const signingMessage: string = authorizer.createSigningMessage(httpRequest, authorizationParameters, requiredAuthorizationHeaders);
+    it('message verifies', () => {
+      const expectedSigningMessage = `(request-target): get /foo?param=value&pet=dog
+host: example.com
+date: Mon, 11 Jan 2021 20:54:32 GMT`;
+      signingMessage.should.equal(expectedSigningMessage);
+    });
+  });
+  describe('Can create an "all headers" singing message HttpRequest', () => {
+    const requestDate: string = (new Date()).toUTCString();
+    const currentTimestamp: number = Math.floor(Date.now() / 1000);
+    const httpBody: string = '{"hello": "world"}';
+    const httpRequest: typeof HttpHeaders = {
+      method: HttpMethod.Get,
+      path: '/foo?param=value&pet=dog',
+      headers: {
+        'Host': 'example.com',
+        'Date': requestDate,
+        'Content-Type': 'application/json; encoding=utf-8',
+        'Accept': 'application/json',
+        'Content-Length': httpBody.length * 2
+      },
+      body: httpBody
+    };
+    const createdTimestamp: number = currentTimestamp - (60 * 60 * 24);
+    const expiresTimestamp: number = currentTimestamp + (60 * 60 * 24);
+    const authorizationParameters: Record<string,any> = {
+      created: createdTimestamp,
+      expires: expiresTimestamp
+    };
+    const requiredAuthorizationHeaders: string[] = [
+      '(request-target)',
+      '(created)',
+      '(expires)',
+      'host',
+      'date',
+      'content-type',
+      'content-length'
+    ];
+    const signingMessage: string = authorizer.createSigningMessage(httpRequest, authorizationParameters, requiredAuthorizationHeaders);
+    it('message verifies', () => {
+      const expectedSigningMessage = `(request-target): get /foo?param=value&pet=dog
+(created): ${createdTimestamp}
+(expires): ${expiresTimestamp}
+host: example.com
+date: ${requestDate}
+content-type: application/json; encoding=utf-8
+content-length: 36`;
+      signingMessage.should.equal(expectedSigningMessage);
+    });
+  });
+});
+
+describe('HTTP authorization signatures', () => {
+  describe('Can parse authorization signatures', () => {
+    it('Parses "default" signature', () => {
+      const signature: string = 'Signature keyId="Test",algorithm="rsa-sha256",signature="abc123"';
+      const expectedResult: Record<string,any> = {
+        keyId: 'Test',
+        algorithm: 'rsa-sha256',
+        headers: [
+          'Date'
+        ],
+        signature: 'abc123'
+      }
+      const result: Record<string,any> = authorizer.getAuthorizationParametersFromSignatureHeader(signature);
+      expect(result).to.deep.equalInAnyOrder(expectedResult);
+    });
+    it('Parses "basic" signature', () => {
+      const signature: string = 'Signature keyId="Test",algorithm="rsa-sha256",headers="(request-target) host date",signature="abc123"';
+      const expectedResult: Record<string,any> = {
+        keyId: 'Test',
+        algorithm: 'rsa-sha256',
+        headers: [
+          '(request-target)',
+          'host',
+          'date',
+        ],
+        signature: 'abc123'
+      }
+      const result: Record<string,any> = authorizer.getAuthorizationParametersFromSignatureHeader(signature);
+      expect(result).to.deep.equalInAnyOrder(expectedResult);
+    });
+    it('Parses "all headers" signature', () => {
+      const signature: string = 'Signature keyId="Test",algorithm="rsa-sha256",created=1402170695, expires=1402170699,headers="(request-target) (created) (expires) host date content-type digest content-length",signature="abc123"';
+      const expectedResult: Record<string,any> = {
+        keyId: 'Test',
+        algorithm: 'rsa-sha256',
+        created: 1402170695,
+        expires: 1402170699,
+        headers: [
+          '(request-target)',
+          '(created)',
+          '(expires)',
+          'host',
+          'date',
+          'content-type',
+          'digest',
+          'content-length'
+        ],
+        signature: 'abc123'
+      }
+      const result: Record<string,any> = authorizer.getAuthorizationParametersFromSignatureHeader(signature);
+      expect(result).to.deep.equalInAnyOrder(expectedResult);
+    });
+  })
+
+});
+
+describe('Message signatures', () => {
   const privateKeyString: string = '-----BEGIN ENCRYPTED PRIVATE KEY-----\n' +
     'MIIJrTBXBgkqhkiG9w0BBQ0wSjApBgkqhkiG9w0BBQwwHAQIej8JDk4bMdACAggA\n' +
     'MAwGCCqGSIb3DQIJBQAwHQYJYIZIAWUDBAEqBBAY83XsD0u5RwuHaZ4YYM/4BIIJ\n' +
@@ -136,61 +320,468 @@ describe('Message signature', () => {
     '8guE9yx3f1iRY+BOI8+TAeyFXooxtWCWwMzXb28bzpNMTekaz0i7BAetLrWI8J9h\n' +
     '0E+mq43INNUOyCfSmSahQqqRHIM2hlNibbJZNtlaG1jdyWD8w+W18JOEh/XWWcfM\n' +
     'eqSU9VUt9GQ2TZk8YcTm70UZzwogJfCFEGIC9vdfAksP\n' +
-    '-----END ENCRYPTED PRIVATE KEY-----\n'
+    '-----END ENCRYPTED PRIVATE KEY-----\n';
   const passphrase: string = 'I6lL3W7o3HAnpXldcdWm';
   const cipher: string = '';
-  const privateKey = crypto.createPrivateKey({
+  const privateKey: typeof crypto.PrivateKeyObject = crypto.createPrivateKey({
     key: privateKeyString,
     passphrase: passphrase,
     cipher: authorizer.privateKeyCipher
   });
+
+  const publicKeyString: string = '-----BEGIN PUBLIC KEY-----\n' +
+    'MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAxkkSR5n3vYheqbXrI8rB\n' +
+    '+Yj7tWqhL8QUjdfPBQ+SoGmL8IFr7JVhYCBr11xfbT6PxoWeVRnYwcEg/VJsbMb8\n' +
+    'y/nCi6BsiKH7yAxjBumC1Yud68foMwkDCgXe8pKRkB89d8tiWu3WMsdXHIlAIID4\n' +
+    'Jsp8gFit5bA8xrNvrA+XphrY9na56OWNeQ3+/ktfqWE3MXjMht5y7Aje09v2oTik\n' +
+    'a0ANwhXimWOsaVOAk+YU293+C/dSaO+c1K04FSjNv5L7lWvRcmjz8CGwoH4f+ztF\n' +
+    'Dn4RrYTZe9KHASON4SufE6jxEO2d2V62+ffoEcCMlpSOw9uBz2CzkJHDkWPvQ9sJ\n' +
+    'cI2LWjJ+WCig4hKmho2aV9duqOlgyO7aWgZI7Rrvlt1gl8xur9fqkE/JYVPQo4Y7\n' +
+    'n5Ijg/5OFIoh5IHTmEeONjJqueyfIYRUkOoYpdEfgCNoYFNmqOAHNtz4PQdQTWcb\n' +
+    'vH4rEyiV2xL9GpVQCjj6JB1HwbIl0rFUXFJ2KaBdeTdFPv4aW3Kd2YkLFP8AujyA\n' +
+    'mkiV9Bnat1PAfEkKJJM2uk7TZNcKTmFCBoqVMjB5S4OQprzGzOTrQFS3H+XFVO99\n' +
+    'kKC2Mm2hrGg9UVXc0kP4gqXPgkURkPnGdFs3yNcQkeesOV0hlOuqW8fOzIum7e7x\n' +
+    'lk0QSPNm3b6GUJjPJ6pFG60CAwEAAQ==\n' +
+    '-----END PUBLIC KEY-----\n';
+  const publicKey: typeof crypto.PublicKeyObject = crypto.createPublicKey({
+    key: publicKeyString,
+    type: 'pkcs1',
+    format: 'pem',
+    encoding: 'base64'
+  });
+  const keyId: string = 'keyId';
   const httpBody: string = '{"hello": "world"}';
   const hashAlgorithm = 'SHA256';
-  const httpRequest: typeof HttpHeaders = {
-    method: HttpMethod.Get,
-    path: '/foo?param=value&pet=dog',
-    headers: {
-      'Host': 'example.com',
-      'Date': 'Mon, 11 Jan 2021 20:54:32 GMT', // (new Date()).toUTCString(),
-      'Content-Type': 'application/json; encoding=utf-8',
-      'Accept': 'application/json',
-      'Content-Length': httpBody.length * 2
-    },
-    body: httpBody
-  };
-  const authorizationParameters: Record<string,any> = {
-    created: 1610312072, // Math.floor(Date.now() / 1000) - (60 * 60 * 24),
-    expires: 1610484872 // Math.floor(Date.now() / 1000) + (60 * 60 * 24)
-  };
-  const requiredAuthorizationHeaders: string[] = [
-    '(request-target)',
-    '(created)',
-    '(expires)',
-    'host',
-    'date',
-    'content-type',
-    'content-length'
-  ];
-  const messageSignature: string = authorizer.createMessageSignature(
-    httpRequest,
-    privateKey,
-    hashAlgorithm,
-    authorizationParameters,
-    requiredAuthorizationHeaders
-  );
-  it('signature is a string', () => {
-    const messageSignatureType = typeof(messageSignature);
-    messageSignatureType.should.equal('string');
+  describe('Signature creation', () => {
+    const httpRequest: typeof HttpHeaders = {
+      method: HttpMethod.Get,
+      path: '/foo?param=value&pet=dog',
+      headers: {
+        'Host': 'example.com',
+        'Date': 'Mon, 11 Jan 2021 20:54:32 GMT', // (new Date()).toUTCString(),
+        'Content-Type': 'application/json; encoding=utf-8',
+        'Accept': 'application/json',
+        'Content-Length': httpBody.length * 2
+      },
+      body: httpBody
+    };
+    const authorizationParameters: Record<string,any> = {
+      created: 1610312072, // Math.floor(Date.now() / 1000) - (60 * 60 * 24),
+      expires: 1610484872 // Math.floor(Date.now() / 1000) + (60 * 60 * 24)
+    };
+    const requiredAuthorizationHeaders: string[] = [
+      '(request-target)',
+      '(created)',
+      '(expires)',
+      'host',
+      'date',
+      'content-type',
+      'content-length'
+    ];
+    const messageSignature: string = authorizer.createMessageSignature(
+      httpRequest,
+      privateKey,
+      hashAlgorithm,
+      authorizationParameters,
+      requiredAuthorizationHeaders
+    );
+    it('signature is a string', () => {
+      const messageSignatureType = typeof(messageSignature);
+      messageSignatureType.should.equal('string');
+    });
+    it('signature is valid', () => {
+      const expectedSignature = 'BCekw5snRmcyEnpWLFiKKFXBXG8miig5EhvQs9Da6mLedOOzrnt+1u5OViFgFn2tqGEHgCdDNebp/+AWQFVpUSO1NpUDmYkvw0IHQNH6JBgKEn6AsyiWEV/SK48ZHElwYU8yjVH3ZBwCPYgkVAIldyDJrSHCKNY8AlayC+OwZwm05Zm/oJkobbyU/j5v27VmfyE1NJ7YnZjssuQmIN67wkKcwkGyHTh4fCQcmBQo4YbfjOHVL/vX7zabmEiWLfGbdNVCq9oN+gAP7dDeQxM5KOW4v/HTH1MP3eFYZoWRZitOlNFBHIBRa0KKqnWB43oM7IN1jSrmgIgcx64UxvSJPrjX4JKygFlaqXgKD8EBYqEU85mf1XGIWvzfP3stsDfuL5XxG8bDg41EnshBgkYYXbdgUeQ4sSoQiGvT8IX2JbZrohQdmGFK4pTa/IqyVjMzzV5DUKIL62WOOfjb9JaZ8ttc+RxCT9DS+Qm9UWM7l1yBlrUztEKJ3iM+CGRL1HP3i92hA63IVfOqnud7dGppIEVygfMwEtlpENvSZBT6KyPuyDXRB59x9yuwCZvlAe9RYv/5XlV2JCgewstYpJU4kyiPX3Z5BxrRwApZT9c6IjEfA2wVm1pipnzCAJe90QNoJ4fBc11EIPd8wTKHxOo2KLqVAGsZAAqAvLGTXZvXPqg='
+      messageSignature.should.equal(expectedSignature)
+    });
   });
-  it('signature is valid', () => {
-    const expectedSignature = 'BCekw5snRmcyEnpWLFiKKFXBXG8miig5EhvQs9Da6mLedOOzrnt+1u5OViFgFn2tqGEHgCdDNebp/+AWQFVpUSO1NpUDmYkvw0IHQNH6JBgKEn6AsyiWEV/SK48ZHElwYU8yjVH3ZBwCPYgkVAIldyDJrSHCKNY8AlayC+OwZwm05Zm/oJkobbyU/j5v27VmfyE1NJ7YnZjssuQmIN67wkKcwkGyHTh4fCQcmBQo4YbfjOHVL/vX7zabmEiWLfGbdNVCq9oN+gAP7dDeQxM5KOW4v/HTH1MP3eFYZoWRZitOlNFBHIBRa0KKqnWB43oM7IN1jSrmgIgcx64UxvSJPrjX4JKygFlaqXgKD8EBYqEU85mf1XGIWvzfP3stsDfuL5XxG8bDg41EnshBgkYYXbdgUeQ4sSoQiGvT8IX2JbZrohQdmGFK4pTa/IqyVjMzzV5DUKIL62WOOfjb9JaZ8ttc+RxCT9DS+Qm9UWM7l1yBlrUztEKJ3iM+CGRL1HP3i92hA63IVfOqnud7dGppIEVygfMwEtlpENvSZBT6KyPuyDXRB59x9yuwCZvlAe9RYv/5XlV2JCgewstYpJU4kyiPX3Z5BxrRwApZT9c6IjEfA2wVm1pipnzCAJe90QNoJ4fBc11EIPd8wTKHxOo2KLqVAGsZAAqAvLGTXZvXPqg='
-    messageSignature.should.equal(expectedSignature)
-  })
+  describe('Signature verification', () => {
+    it('Returns false if HTTP headers missing', () => {
+      let httpRequest: typeof HttpHeaders = {
+        method: HttpMethod.Get,
+        path: '/foo?param=value&pet=dog',
+        headers: {
+          'Host': 'example.com',
+          'Date': 'Mon, 11 Jan 2021 20:54:32 GMT', // (new Date()).toUTCString(),
+          'Content-Type': 'application/json; encoding=utf-8',
+          'Accept': 'application/json',
+          'Content-Length': httpBody.length * 2,
+          'E-Tag': '1234'
+        },
+        body: httpBody
+      };
+      const authorizationParameters: Record<string,any> = {
+        created: 1610312072, // Math.floor(Date.now() / 1000) - (60 * 60 * 24),
+        expires: 1610484872 // Math.floor(Date.now() / 1000) + (60 * 60 * 24)
+      };
+      const requiredAuthorizationHeaders: string[] = [
+        '(request-target)',
+        '(created)',
+        '(expires)',
+        'host',
+        'date',
+        'content-type',
+        'content-length',
+        'e-tag',
+      ];
+      const header: string = authorizer.createAuthorizationHeader(
+        httpRequest,
+        privateKey,
+        keyId,
+        hashAlgorithm,
+        authorizationParameters,
+        requiredAuthorizationHeaders
+      );
+      httpRequest = {
+        method: HttpMethod.Get,
+        path: '/foo?param=value&pet=dog',
+        headers: {
+          'Host': 'example.com',
+          'Date': 'Mon, 11 Jan 2021 20:54:32 GMT', // (new Date()).toUTCString(),
+          'Content-Type': 'application/json; encoding=utf-8',
+          'Accept': 'application/json',
+          'Content-Length': httpBody.length * 2
+        },
+        body: httpBody
+      };
+      const doesVerify: string = authorizer.doesSignatureHeaderVerify(
+        header,
+        httpRequest,
+        publicKey
+      );
+      doesVerify.should.be.false;
+    });
+    it('Returns false if authorization parameters headers missing', () => {
+      let httpRequest: typeof HttpHeaders = {
+        method: HttpMethod.Get,
+        path: '/foo?param=value&pet=dog',
+        headers: {
+          'Host': 'example.com',
+          'Date': 'Mon, 11 Jan 2021 20:54:32 GMT', // (new Date()).toUTCString(),
+          'Content-Type': 'application/json; encoding=utf-8',
+          'Accept': 'application/json',
+          'Content-Length': httpBody.length * 2
+        },
+        body: httpBody
+      };
+      const authorizationParameters: Record<string,any> = {};
+      const requiredAuthorizationHeaders: string[] = [
+        '(request-target)',
+        '(expires)',
+        'host',
+        'date',
+        'content-type',
+        'content-length',
+      ];
+      let header: string = authorizer.createAuthorizationHeader(
+        httpRequest,
+        privateKey,
+        keyId,
+        hashAlgorithm,
+        authorizationParameters,
+        requiredAuthorizationHeaders
+      );
+      header = `${header.substring(0, header.length - 1)} (created)"`;
+      const doesVerify: string = authorizer.doesSignatureHeaderVerify(
+        header,
+        httpRequest,
+        publicKey
+      );
+      doesVerify.should.be.false;
+    });
+    it('Returns false if created in the future', () => {
+      let httpRequest: typeof HttpHeaders = {
+        method: HttpMethod.Get,
+        path: '/foo?param=value&pet=dog',
+        headers: {
+          'Host': 'example.com',
+          'Date': 'Mon, 11 Jan 2021 20:54:32 GMT', // (new Date()).toUTCString(),
+          'Content-Type': 'application/json; encoding=utf-8',
+          'Accept': 'application/json',
+          'Content-Length': httpBody.length * 2,
+        },
+        body: httpBody
+      };
+      const authorizationParameters: Record<string,any> = {
+        created:  Math.floor(Date.now() / 1000) + (60 * 60 * 24),
+      };
+      const requiredAuthorizationHeaders: string[] = [
+        '(created)',
+      ];
+      const header: string = authorizer.createAuthorizationHeader(
+        httpRequest,
+        privateKey,
+        keyId,
+        hashAlgorithm,
+        authorizationParameters,
+        requiredAuthorizationHeaders
+      );
+      const doesVerify: string = authorizer.doesSignatureHeaderVerify(
+        header,
+        httpRequest,
+        publicKey
+      );
+      doesVerify.should.be.false;
+    });
+    it('Returns false if expires in the past', () => {
+      let httpRequest: typeof HttpHeaders = {
+        method: HttpMethod.Get,
+        path: '/foo?param=value&pet=dog',
+        headers: {
+          'Date': 'Mon, 11 Jan 2021 20:54:32 GMT',
+        },
+        body: httpBody
+      };
+      const authorizationParameters: Record<string,any> = {
+        expires: Math.floor(Date.now() / 1000) - (60 * 60 * 24),
+      };
+      const requiredAuthorizationHeaders: string[] = [
+        '(expires)',
+      ];
+      const header: string = authorizer.createAuthorizationHeader(
+        httpRequest,
+        privateKey,
+        keyId,
+        hashAlgorithm,
+        authorizationParameters,
+        requiredAuthorizationHeaders
+      );
+      const doesVerify: string = authorizer.doesSignatureHeaderVerify(
+        header,
+        httpRequest,
+        publicKey
+      );
+      doesVerify.should.be.false;
+    });
+    it('Returns false if no Date HTTP header and empty headers key', () => {
+      let httpRequest: typeof HttpHeaders = {
+        method: HttpMethod.Get,
+        path: '/foo?param=value&pet=dog',
+        headers: {
+          'Date': 'Mon, 11 Jan 2021 20:54:32 GMT',
+        },
+        body: httpBody
+      };
+      const authorizationParameters: Record<string,any> = {};
+      const requiredAuthorizationHeaders: string[] = [];
+      const header: string = authorizer.createAuthorizationHeader(
+        httpRequest,
+        privateKey,
+        keyId,
+        hashAlgorithm,
+        authorizationParameters,
+        requiredAuthorizationHeaders
+      );
+      httpRequest.headers = {};
+      const doesVerify: string = authorizer.doesSignatureHeaderVerify(
+        header,
+        httpRequest,
+        publicKey
+      );
+      doesVerify.should.be.false;
+    });
+    it('Returns false if signature cannot be verified', () => {
+      let httpRequest: typeof HttpHeaders = {
+        method: HttpMethod.Get,
+        path: '/foo?param=value&pet=dog',
+        headers: {
+          'Date': 'Mon, 11 Jan 2021 20:54:32 GMT',
+        },
+        body: httpBody
+      };
+      const staticHeader = 'Signature algorithm="SHA256",keyId="keyId",signature="wGSJE1xujF5WpDyfcOOBCwmgeFV9o6vGwLljc9wcsGUiI2uyHDQN/2CI+YleFT2sR+znOb1imEjJ/QjGxZwGR1IaeHu4x/+eJUVeerCAlQqW7LJDVdsaW9P2A+T+L5Ev6Vcn4CA+Kv/gdulYhUl+uQ2ZcusMMMQjInq7d+DbyM4MNC+GK+TJpbpzJoVAOu6L7A5B02nJ8Nezz5bwo39iavRXCtekk7j7x+j7KwXyCTSKUcvX9ext6+IByrlaGFXGzmUc94WtYBSVfu1rh0gWQdUeklfIq4KlFQjQQAEpQJSbY2OWVpWT0o12NPC3heaFT7l7viy+g/+5/273nJjZCxjGUBbMZkb1Sc96LWVL23hhr5rYZ3CjVc+Q1OVi/uSkATrR3Ovl1y5kfjgw/QrB4OQ9oT+u4hU//1Pqindp1mOwnlJXG2HObl+vBfgxrKd31eJ2q1uXfjSd0rrWpfAoWxBF2lcmp4eLBQpWTe9m4h/EWhacxRhAYvefkszpA4HY5rNUYTECbjK5NPMYJ2fe5nBTAAQkvg3O3+aRm6KQLU2LPlfxKDCHN9vLwD2DWYzY78ndEX4cPvA6NevBlE7ZUcfnCwxmKwQpeU6hJs980RNjSFfG3MZxQJxfBn5N4K5qGzjcwDpGRKmCY79NnOEfu0MJtSFSKZszVOcEwr9/Tck=",created=1610398006,expires=1610570806,headers="(request-target) (created) (expires) host date content-type content-length"';
+      const doesVerify: string = authorizer.doesSignatureHeaderVerify(
+        staticHeader,
+        httpRequest,
+        publicKey
+      );
+      doesVerify.should.be.false;
+    });
+    it('Returns true if if signature can be verified', () => {
+      let httpRequest: typeof HttpHeaders = {
+        method: HttpMethod.Get,
+        path: '/foo?param=value&pet=dog',
+        headers: {
+          'Host': 'example.com',
+          'Date': 'Mon, 11 Jan 2021 20:54:32 GMT',
+          'Content-Type': 'application/json; encoding=utf-8',
+          'Content-Length': httpBody.length * 2
+        },
+        body: httpBody
+      };
+      const createdTimestamp: number = Math.floor(Date.now() / 1000) - (60 * 60 * 24)
+      const expiresTimestamp: number = Math.floor(Date.now() / 1000) + (60 * 60 * 24)
+      const authorizationParameters: Record<string,any> = {
+        created: createdTimestamp,
+        expires: expiresTimestamp
+      };
+      const requiredAuthorizationHeaders: string[] = [
+        '(request-target)',
+        '(created)',
+        '(expires)',
+        'host',
+        'date',
+        'content-type',
+        'content-length',
+      ];
+      const keyId: string = 'keyId';
+      const staticSignature: string = authorizer.createAuthorizationHeader(
+        httpRequest,
+        privateKey,
+        keyId,
+        hashAlgorithm,
+        authorizationParameters,
+        requiredAuthorizationHeaders
+      );
+      const doesVerify: string = authorizer.doesSignatureHeaderVerify(
+        staticSignature,
+        httpRequest,
+        publicKey
+      );
+      doesVerify.should.be.true;
+    });
+  });
+  describe('Verifies HTTP Requests', () => {
+    it('Returns true on valid HttpRequest', () => {
+      let httpRequest: typeof HttpHeaders = {
+        method: HttpMethod.Get,
+        path: '/foo?param=value&pet=dog',
+        headers: {
+          'Host': 'example.com',
+          'Date': 'Mon, 11 Jan 2021 20:54:32 GMT',
+          'Content-Type': 'application/json; encoding=utf-8',
+          'Content-Length': httpBody.length * 2,
+          'Digest': authorizer.createDigestHeader(httpBody, 'SHA256')
+        },
+        body: httpBody
+      };
+      const createdTimestamp: number = Math.floor(Date.now() / 1000) - (60 * 60 * 24)
+      const expiresTimestamp: number = Math.floor(Date.now() / 1000) + (60 * 60 * 24)
+      const authorizationParameters: Record<string,any> = {
+        created: createdTimestamp,
+        expires: expiresTimestamp
+      };
+      const requiredAuthorizationHeaders: string[] = [
+        '(request-target)',
+        '(created)',
+        '(expires)',
+        'host',
+        'date',
+        'content-type',
+        'content-length',
+        'digest'
+      ];
+      const keyId: string = 'keyId';
+      const signature: string = authorizer.createAuthorizationHeader(
+        httpRequest,
+        privateKey,
+        keyId,
+        hashAlgorithm,
+        authorizationParameters,
+        requiredAuthorizationHeaders
+      );
+      httpRequest.headers['Authorization'] = signature
+      httpRequest.headers['Signature'] = signature
+      const doesVerify: string = authorizer.doesHttpRequestVerify(
+        httpRequest,
+        publicKey
+      );
+      doesVerify.should.be.true;
+    });
+    it('Returns false on on mismatched Authorization and Signature headers', () => {
+      let httpRequest: typeof HttpHeaders = {
+        method: HttpMethod.Get,
+        path: '/foo?param=value&pet=dog',
+        headers: {
+          'Host': 'example.com',
+          'Date': 'Mon, 11 Jan 2021 20:54:32 GMT',
+          'Content-Type': 'application/json; encoding=utf-8',
+          'Content-Length': httpBody.length * 2
+        },
+        body: httpBody
+      };
+      const createdTimestamp: number = Math.floor(Date.now() / 1000) - (60 * 60 * 24)
+      const expiresTimestamp: number = Math.floor(Date.now() / 1000) + (60 * 60 * 24)
+      const authorizationParameters: Record<string,any> = {
+        created: createdTimestamp,
+        expires: expiresTimestamp
+      };
+      const requiredAuthorizationHeaders: string[] = [
+        '(request-target)',
+        '(created)',
+        '(expires)',
+        'host',
+        'date',
+        'content-type',
+        'content-length',
+      ];
+      const keyId: string = 'keyId';
+      const signature: string = authorizer.createAuthorizationHeader(
+        httpRequest,
+        privateKey,
+        keyId,
+        hashAlgorithm,
+        authorizationParameters,
+        requiredAuthorizationHeaders
+      );
+      httpRequest.headers['Authorization'] = signature
+      httpRequest.headers['Signature'] = signature + '-'
+      const doesVerify: string = authorizer.doesHttpRequestVerify(
+        httpRequest,
+        publicKey
+      );
+      doesVerify.should.be.false;
+    });
+    it('Returns false if authorization invalid', () => {
+      let httpRequest: typeof HttpHeaders = {
+        method: HttpMethod.Get,
+        path: '/foo?param=value&pet=dog',
+        headers: {
+          'Host': 'example.com',
+          'Date': 'Mon, 11 Jan 2021 20:54:32 GMT',
+          'Content-Type': 'application/json; encoding=utf-8',
+          'Content-Length': httpBody.length * 2
+        },
+        body: httpBody
+      };
+      const createdTimestamp: number = Math.floor(Date.now() / 1000) - (60 * 60 * 24)
+      const expiresTimestamp: number = Math.floor(Date.now() / 1000) + (60 * 60 * 24)
+      const authorizationParameters: Record<string,any> = {
+        created: createdTimestamp,
+        expires: expiresTimestamp
+      };
+      const requiredAuthorizationHeaders: string[] = [
+        '(request-target)',
+        '(created)',
+        '(expires)',
+        'host',
+        'date',
+        'content-type',
+        'content-length',
+      ];
+      const keyId: string = 'keyId';
+      const signature: string = authorizer.createAuthorizationHeader(
+        httpRequest,
+        privateKey,
+        keyId,
+        hashAlgorithm,
+        authorizationParameters,
+        requiredAuthorizationHeaders
+      );
+      httpRequest.headers['Authorization'] = signature
+      httpRequest.headers['Signature'] = signature
+      httpRequest.headers['Host'] = 'anotherexample.com'
+      const doesVerify: string = authorizer.doesHttpRequestVerify(
+        httpRequest,
+        publicKey
+      );
+      doesVerify.should.be.false;
+
+    });
+  });
 });
 
 
-describe('Http Header', () => {
-  const authorizer: typeof HttpKeyPairAuthorizator = new HttpKeyPairAuthorizator();
+describe('Http authorization headers', () => {
   const privateKeyString: string = '-----BEGIN ENCRYPTED PRIVATE KEY-----\n' +
     'MIIJrTBXBgkqhkiG9w0BBQ0wSjApBgkqhkiG9w0BBQwwHAQIej8JDk4bMdACAggA\n' +
     'MAwGCCqGSIb3DQIJBQAwHQYJYIZIAWUDBAEqBBAY83XsD0u5RwuHaZ4YYM/4BIIJ\n' +
@@ -287,12 +878,14 @@ describe('Http Header', () => {
     authorizationParameters,
     requiredAuthorizationHeaders
   );
-  it('signature is a string', () => {
-    const headerType = typeof(header);
-    headerType.should.equal('string');
-  });
-  it('signature is valid', () => {
-    const expectedHeader = 'algorithm="SHA256",keyId="keyId",signature="BCekw5snRmcyEnpWLFiKKFXBXG8miig5EhvQs9Da6mLedOOzrnt+1u5OViFgFn2tqGEHgCdDNebp/+AWQFVpUSO1NpUDmYkvw0IHQNH6JBgKEn6AsyiWEV/SK48ZHElwYU8yjVH3ZBwCPYgkVAIldyDJrSHCKNY8AlayC+OwZwm05Zm/oJkobbyU/j5v27VmfyE1NJ7YnZjssuQmIN67wkKcwkGyHTh4fCQcmBQo4YbfjOHVL/vX7zabmEiWLfGbdNVCq9oN+gAP7dDeQxM5KOW4v/HTH1MP3eFYZoWRZitOlNFBHIBRa0KKqnWB43oM7IN1jSrmgIgcx64UxvSJPrjX4JKygFlaqXgKD8EBYqEU85mf1XGIWvzfP3stsDfuL5XxG8bDg41EnshBgkYYXbdgUeQ4sSoQiGvT8IX2JbZrohQdmGFK4pTa/IqyVjMzzV5DUKIL62WOOfjb9JaZ8ttc+RxCT9DS+Qm9UWM7l1yBlrUztEKJ3iM+CGRL1HP3i92hA63IVfOqnud7dGppIEVygfMwEtlpENvSZBT6KyPuyDXRB59x9yuwCZvlAe9RYv/5XlV2JCgewstYpJU4kyiPX3Z5BxrRwApZT9c6IjEfA2wVm1pipnzCAJe90QNoJ4fBc11EIPd8wTKHxOo2KLqVAGsZAAqAvLGTXZvXPqg=",headers="(request-target) (created) (expires) host date content-type content-length"'
-    header.should.equal(expectedHeader)
+  describe('Header creation', () => {
+    it('signature is a string', () => {
+      const headerType = typeof(header);
+      headerType.should.equal('string');
+    });
+    it('signature is valid', () => {
+      const expectedHeader = 'Signature algorithm="SHA256",keyId="keyId",signature="BCekw5snRmcyEnpWLFiKKFXBXG8miig5EhvQs9Da6mLedOOzrnt+1u5OViFgFn2tqGEHgCdDNebp/+AWQFVpUSO1NpUDmYkvw0IHQNH6JBgKEn6AsyiWEV/SK48ZHElwYU8yjVH3ZBwCPYgkVAIldyDJrSHCKNY8AlayC+OwZwm05Zm/oJkobbyU/j5v27VmfyE1NJ7YnZjssuQmIN67wkKcwkGyHTh4fCQcmBQo4YbfjOHVL/vX7zabmEiWLfGbdNVCq9oN+gAP7dDeQxM5KOW4v/HTH1MP3eFYZoWRZitOlNFBHIBRa0KKqnWB43oM7IN1jSrmgIgcx64UxvSJPrjX4JKygFlaqXgKD8EBYqEU85mf1XGIWvzfP3stsDfuL5XxG8bDg41EnshBgkYYXbdgUeQ4sSoQiGvT8IX2JbZrohQdmGFK4pTa/IqyVjMzzV5DUKIL62WOOfjb9JaZ8ttc+RxCT9DS+Qm9UWM7l1yBlrUztEKJ3iM+CGRL1HP3i92hA63IVfOqnud7dGppIEVygfMwEtlpENvSZBT6KyPuyDXRB59x9yuwCZvlAe9RYv/5XlV2JCgewstYpJU4kyiPX3Z5BxrRwApZT9c6IjEfA2wVm1pipnzCAJe90QNoJ4fBc11EIPd8wTKHxOo2KLqVAGsZAAqAvLGTXZvXPqg=",created=1610312072,expires=1610484872,headers="(request-target) (created) (expires) host date content-type content-length"';
+      header.should.equal(expectedHeader);
+    });
   });
 });
