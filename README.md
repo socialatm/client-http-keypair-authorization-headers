@@ -370,62 +370,66 @@ $ npm run-script build
 ```
 $ npm test
 
-Gets (request-target) from HttpRequest
-  ✓ Can create a (request-target) from HttpRequest
+  Gets (request-target) from HttpRequest
+    ✓ Can create a (request-target) from HttpRequest
 
-Passphrase
-  Generate passphrase:
-    ✓ passphrases should exist
-    ✓ passphrases should be a string
-    ✓ passphrases should be of length `.defaultPassphraseLength`
-  Save passphrase:
-    ✓ can store a passphrase
+  Passphrase
+    Generate passphrase:
+      ✓ passphrases should exist
+      ✓ passphrases should be a string
+      ✓ passphrases should be of length `.defaultPassphraseLength`
+    Save passphrase:
+      ✓ can store a passphrase
 
-Digests
-  Can create a digest from a HttpRequest body
-    ✓ Generates valid SHA256 hash
-  Verifies digests
-    ✓ Matching digests return true
-    ✓ Mismatched digest returns false
+  Digests
+    Can create a digest from a HttpRequest body
+      ✓ Generates valid SHA256 hash
+    Verifies digests
+      ✓ Matching digests return true
+      ✓ Mismatched digest returns false
 
-Signing messages
-  Throws error if no "date" header
-    ✓ Error thrown
-  Can create a "default" singing message from HttpRequest
-    ✓ message verifies
-  Can create a "basic" singing message HttpRequest
-    ✓ message verifies
-  Can create an "all headers" singing message HttpRequest
-    ✓ message verifies
+  Signing messages
+    Throws error if no "date" header
+      ✓ Error thrown
+    Can create a "default" singing message from HttpRequest
+      ✓ message verifies
+    Can create a "basic" singing message HttpRequest
+      ✓ message verifies
+    Can create an "all headers" singing message HttpRequest
+      ✓ message verifies
 
-HTTP authorization signatures
-  Can parse authorization signatures
-    ✓ Parses "default" signature
-    ✓ Parses "basic" signature
-    ✓ Parses "all headers" signature
+  HTTP authorization signatures
+    Can parse authorization signatures
+      ✓ Parses "default" signature
+      ✓ Parses "basic" signature
+      ✓ Parses "all headers" signature
 
-Message signatures
-  Signature creation
-    ✓ signature is a string
-    ✓ signature is valid
-  Signature verification
-    ✓ Returns false if HTTP headers missing
-    ✓ Returns false if authorization parameters headers missing
-    ✓ Returns false if created in the future
-    ✓ Returns false if expires in the past
-    ✓ Returns false if no Date HTTP header and empty headers key
-    ✓ Returns false if signature cannot be verified
-    ✓ Returns true if if signature can be verified
-  Verifies HTTP Requests
-    ✓ Returns true on valid HttpRequest
-    ✓ Returns false on on mismatched Authorization and Signature headers
-    ✓ Returns false if authorization invalid
+  Message signatures
+    Signature creation
+      ✓ signature is a string
+      ✓ signature is valid
+    Signature verification
+      ✓ Returns false if HTTP headers missing
+      ✓ Returns false if authorization parameters headers missing
+      ✓ Returns false if created in the future
+      ✓ Returns false if expires in the past
+      ✓ Returns false if no Date HTTP header and empty headers key
+      ✓ Returns false if signature cannot be verified
+      ✓ Returns true if if signature can be verified
+    Verifies HTTP Requests
+      ✓ Returns true on valid HttpRequest
+      ✓ Returns false on on mismatched Authorization and Signature headers
+      ✓ Returns false if authorization invalid
 
-Http authorization headers
-  Header creation
-    ✓ signature is a string
-    ✓ signature is valid
+  Http authorization headers
+    Header creation
+      ✓ signature is a string
+      ✓ signature is valid
 
-
-29 passing (94ms)
+  HttpRequest tests
+    Creates and Verifies Digest
+      ✓ Creates and verifies signature and digest on a HTTP request
+    Signs and Verifies HTTP Request
+      ✓ Signs and verifies HTTP request
+      ✓ Signs and digests and verifies HTTP request
 ```
