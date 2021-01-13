@@ -104,7 +104,7 @@ export default class HttpKeyPairAuthorizer {
     return result;
   }
 
-  createSigningMessage(httpRequest: HttpRequest, authorizationParameters?: Record<string,any>, requiredAuthorizationHeaders?: string[]): string {
+  createSigningMessage(httpRequest: HttpRequest, authorizationParameters?: Record<string,any>): string {
     /**
      * Create the string that will be signed, from the HTTP headers.
      *
@@ -116,36 +116,37 @@ export default class HttpKeyPairAuthorizer {
      */
     const httpHeaders = httpRequest.headers;
     const signingRows: string[] = [];
-    if (requiredAuthorizationHeaders && requiredAuthorizationHeaders.length > 0) {
-     for (let i=0; i<requiredAuthorizationHeaders.length; i++) {
-       const header: string = requiredAuthorizationHeaders[i];
-       if (header[0] === '(') {
-         if (header === '(request-target)') {
-           const requestTarget = this.__getRequestTarget(httpRequest);
-           signingRows.push(`${header}: ${requestTarget}`)
-         } else {
-           const cleanedHeader: string = header.substring(1, header.length - 1)
-           signingRows.push(`${header}: ${authorizationParameters[cleanedHeader]}`)
-         }
-       } else {
-         const cleanedHeader: string = header.toLowerCase().split('-').map( (word: string, index: number) => {
-           return word.replace(word[0], word[0].toUpperCase());
-         }).join('-');
-         signingRows.push(`${header}: ${httpHeaders[cleanedHeader]}`);
-       }
-     }
+    if (authorizationParameters.headers && authorizationParameters.headers.length > 0) {
+      const requiredAuthorizationHeaders: string[] = authorizationParameters.headers;
+      for (let i=0; i<requiredAuthorizationHeaders.length; i++) {
+        const header: string = requiredAuthorizationHeaders[i];
+        if (header[0] === '(') {
+          if (header === '(request-target)') {
+            const requestTarget = this.__getRequestTarget(httpRequest);
+            signingRows.push(`${header}: ${requestTarget}`)
+          } else {
+            const cleanedHeader: string = header.substring(1, header.length - 1)
+            signingRows.push(`${header}: ${authorizationParameters[cleanedHeader]}`)
+          }
+        } else {
+          const cleanedHeader: string = header.toLowerCase().split('-').map( (word: string, index: number) => {
+            return word.replace(word[0], word[0].toUpperCase());
+          }).join('-');
+          signingRows.push(`${header}: ${httpHeaders[cleanedHeader]}`);
+        }
+      }
     } else {
      if (httpHeaders && httpHeaders.Date) {
        signingRows.push(`date: ${httpHeaders.Date}`);
      } else {
-       throw Error('If no requiredAuthorizationHeaders are specified, a "Date" HTTP header must exist to create')
+       throw Error('If no authorizationParameters.headers are specified, a "Date" HTTP header must exist to create')
      }
     }
     const signingMessage: string = signingRows.join('\n');
     return signingMessage
   }
 
-  createMessageSignature (httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, hashAlgorithm: string, authorizationParameters: Record<string,any>, requiredAuthorizationHeaders?: string[]): string {
+  createMessageSignature (httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string,any>): string {
     /**
      * Create the message signature
      *
@@ -157,15 +158,15 @@ export default class HttpKeyPairAuthorizer {
      * @param {string[]} A list of headers and pseudo-headers to be used to build the signed message
      * @return {string} A signature created from the parameters provided
      */
-    const signingMessage: string = this.createSigningMessage(httpRequest, authorizationParameters, requiredAuthorizationHeaders);
-    const signer: typeof crypto.Sign = crypto.createSign(hashAlgorithm);
+    const signingMessage: string = this.createSigningMessage(httpRequest, authorizationParameters);
+    const signer: typeof crypto.Sign = crypto.createSign(authorizationParameters.algorithm);
     signer.update(signingMessage);
     signer.end();
     const signature: string = signer.sign(privateKey, 'base64');
     return signature;
   }
 
-  createAuthorizationHeader (httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, keyId: string, hashAlgorithm: string, authorizationParameters: Record<string,any>, requiredAuthorizationHeaders: string[]): string {
+  createAuthorizationHeader (httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string,any>): string {
     /**
      * Sign message. Algorithms are available at
      *
@@ -175,18 +176,25 @@ export default class HttpKeyPairAuthorizer {
      * @param {string[]} The header keys to be included in the authorization signature
      * @return {string} The full Authorization HTTP header including algorithm="", keyId="", signature="", and headers="".
      */
-    const signature: string = this.createMessageSignature (httpRequest, privateKey, hashAlgorithm, authorizationParameters, requiredAuthorizationHeaders);
+    const signature: string = this.createMessageSignature(httpRequest, privateKey, authorizationParameters);
     const signatureHeaders: Record<string,any> = {
-      algorithm: hashAlgorithm,
-      keyId: keyId,
+      algorithm: authorizationParameters.algorithm,
+      keyId: authorizationParameters.keyId,
       signature: signature
     };
-    for (const key in authorizationParameters) {
-      signatureHeaders[key] = authorizationParameters[key];
+    let authorizationHeaderString: string = '';
+    if (authorizationParameters) {
+      for (const key in authorizationParameters) {
+        if (key != 'headers') {
+          signatureHeaders[key] = authorizationParameters[key];
+        }
+      }
+      if (authorizationParameters.headers) {
+        authorizationHeaderString = authorizationParameters.headers.map((key: string, index: number) => {
+          return key;
+        }).join(' ');
+      }
     }
-    const authorizationHeaderString: string = requiredAuthorizationHeaders.map((key: string, index: number) => {
-      return key;
-    }).join(' ');
     // we can omit the headers="" if it's only Date
     if (authorizationHeaderString !== 'Date') {
       signatureHeaders.headers = authorizationHeaderString;
@@ -219,6 +227,39 @@ export default class HttpKeyPairAuthorizer {
     const digest: string = digester.update(text).digest('base64');
     const header: string = `${hashAlgorithm}=${digest}`;
     return header
+  }
+
+  digestHttpRequest(httpRequest: HttpRequest, hashAlgorithm: string) {
+    /**
+     * Create a digest header on a httpRequest
+     *
+     * @param {HttpRequest} The HTTP Request including a `.body` and `.headers`
+     * @param {string} the hash algorithm. Get supported algorithmsfrom `crypto.getHashes()`
+     * @return {HttpRequest} An updated dictionary with a `Digest` header
+     */
+     httpRequest.headers['Digest'] = this.createDigestHeader(httpRequest.body, hashAlgorithm);
+     return httpRequest;
+  }
+
+  signHttpRequest(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string,any>, digestHashAlgorithm?: string) {
+    /**
+     * Create a signed authorization header (and possibly a digest) and place it in the HttpRequest.
+     *
+     * @param {HttpRequest} The HTTP Request including a `.body` and `.headers`
+     * @param {crypto.PrivateKeyObject} The private key which will sign the request
+     * @param {string} The key ID as it's known on the server of the signing key's public key
+     * @param {string} The algorithm used to sign the message. Get supported algorithms from `crypto.getHashes()`
+     * @param {Record<string,any>} The parameters used to generate the signature header
+     * @param {string?} The hash algorithm used to create a digest header, if desired (optional, required if `digest` in 'requiredParameters.headers')
+     * @return {HttpRequest} The updated dictionary with `Authorization` and `Signature` headers, and possibly a `Digest` header
+     */
+    if (digestHashAlgorithm) {
+      httpRequest.headers['Digest'] = this.createDigestHeader(httpRequest.body, digestHashAlgorithm);
+    }
+    const authorizationHeader: string = this.createAuthorizationHeader(httpRequest, privateKey, authorizationParameters);
+    httpRequest.headers['Authorization'] = authorizationHeader;
+    httpRequest.headers['Signature'] = authorizationHeader;
+    return httpRequest;
   }
 
   doesDigestVerify (text: string, digest: string) {
@@ -274,7 +315,7 @@ export default class HttpKeyPairAuthorizer {
          }
        }
      }
-     const signingMessage = this.createSigningMessage(httpRequest, authorizationParameters, requiredAuthorizationHeaders);
+     const signingMessage = this.createSigningMessage(httpRequest, authorizationParameters);
      const doesVerify = crypto.verify(
        authorizationParameters.algorithm,
        Buffer.from(signingMessage),

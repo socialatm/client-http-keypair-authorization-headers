@@ -118,18 +118,17 @@ const httpRequest = {
 }
 
 // describe the
-const keyId = 'Test' // server's ID for client public key
-const authorizationParameters = {}
-const requiredAuthorizationHeaders = [];
-const authorizationHeader = authorizer.createAuthorizationHeader(
+const authorizationParameters = {
+  keyId: 'Test', // server's ID for client public key
+  algorithm: 'SHA256',
+  headers: []
+}
+const updatedHttpRequest = authorizer.createAuthorizationHeader(
   httpRequest,
   privateKey,
-  keyId,
-  hashAlgorithm,
   authorizationParameters,
-  requiredAuthorizationHeaders
 )
-console.log(authorizationHeader);
+console.log(updatedHttpRequest.headers['Authorization']);
 // 'algorithm="SHA256",keyId="Test",signature="iKKFBCekw5snRmcyEnpWLFXBXG8miig...",headers="date"'
 ```
 
@@ -141,6 +140,7 @@ This example shows the full headers including a `Digest` (explained below)
 // if not using in the browser:
 import { HttpKeyPairAuthorizer, HttpMethod } from 'client-http-keypair-authorization-headers'
 
+// load the private key from memory
 const authorizer = new HttpKeyPairAuthorizer()
 const privateKeyString = '-----BEGIN ENCRYPTED PRIVATE KEY-----...'
 const passphrase = 'passphrase'
@@ -149,8 +149,9 @@ const privateKey = crypto.createPrivateKey({
   passphrase: passphrase,
   cipher: 'aes-256-cbc'
 })
+
+// build a HTTP request
 const httpBody = '{"hello": "world"}'
-const hashAlgorithm = 'SHA256'
 const now = new Date();
 const httpRequest = {
   method: HttpMethod.Post,
@@ -161,34 +162,36 @@ const httpRequest = {
     'Content-Type': 'application/json; encoding=utf-8',
     'Accept': 'application/json',
     'Content-Length': (httpBody.length * 2).toString(),
-    'Digest': digest
   },
   body: httpBody
 }
+// Configure signer
 const authorizationParameters = {
+  keyId: 'Test',
+  algorithm: 'SHA256',
   created: Math.floor(now / 1000) - (60 * 60 * 24),
-  expires: Math.floor(now / 1000) + (60 * 60 * 24)
+  expires: Math.floor(now / 1000) + (60 * 60 * 24),
+  headers: [
+    '(request-target)',
+    '(created)',
+    '(expires)',
+    'host',
+    'date',
+    'digest',
+    'content-type',
+    'content-length'
+  ]
 }
-const keyId = 'keyId'
-const requiredAuthorizationHeaders = [
-  '(request-target)',
-  '(created)',
-  '(expires)',
-  'host',
-  'date',
-  'digest',
-  'content-type',
-  'content-length'
-];
-const authorizationHeader = authorizer.createAuthorizationHeader(
+const digestHashAlgorithm = 'SHA256'
+
+// Apply signature headers to HTTP request
+const updatedHttpRequest = authorizer.createAuthorizationHeader(
   httpRequest,
   privateKey,
-  keyId,
-  hashAlgorithm,
   authorizationParameters,
-  requiredAuthorizationHeaders
+  digestHashAlgorithm
 )
-console.log(authorizationHeader);
+console.log(updatedHttpRequest.headers['Authorization']);
 // 'algorithm="SHA256",keyId="keyId",signature="iKKFBCekw5snRmcyEnpWLFXBXG8miig...",created=1234567890,expires=1234567890,headers="(request-target) (created) (expires) host date digest content-type content-length"'
 ```
 
@@ -232,7 +235,7 @@ const response = await fetch(
     },
     body: httpBody
   }
-);
+)
 ```
 
 ### Using with Axios
@@ -242,20 +245,22 @@ const response = await axios.post(
   'http://example.com/foo?param=value&pet=dog',
   httpBody,
   {
-    headers: {
-      'Host': 'example.com',
-      'Date': now.toUTCString(),
-      'Content-Type': 'application/json; encoding=utf-8',
-      'Accept': 'application/json',
-      'Content-Length': (httpBody.length * 2).toString(),
-      // use one or both of these headers, depending on the server specs
-      'Authorization': authorizationHeader,
-      'Signature': authorizationHeader,
-      // if there is a message digest, put here also
-      'Digest': digest,
-    }
+    headers: httpRequest.headers
   }
-);
+)
+```
+
+### Using with http
+
+```js
+const http = require('http')
+
+let req = http.request(httpRequest, (chunk) => {
+  // do something  with the inbound data
+})
+
+req.write(httpRequest.body)
+req.end()
 ```
 
 ## Verify Requests from a Client
