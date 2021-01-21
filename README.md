@@ -62,6 +62,100 @@ Browser file can be found in `dist.browser/http-keypair-auth.js`
 <script src="/path/to/http-keypair-auth.js"></script>
 ```
 
+## Creating and Exchanging Key Pairs
+
+In this authorization system, the client must generate its own public and private keys, and then share the public key with the server. The server must store the public key and associate it with the client, and return to the client an ID for that public key.  Of course the client and server must both support the key pair encryption and signature hashing algorithms.
+
+Therefore, it is important to know how to generate a key pair, plus how to export that key pair to a format that can be stored or transferred across a network.
+
+### Generating Key Pairs
+
+**In Node:**
+```js
+```
+
+**On the browser**
+
+Of course there are many algorithms that can be used to generate a key pair. This example creates an ECDSA-P256 key pair which can be extracted (necessary for saving and sharing) and can be used to both sign and verify signatures (necessary for authorization).
+```js
+var crypto = window.crypto || window.msCrypto
+
+var keyPair = await crypto.subtle.generateKey(
+  {
+    name: 'ECDSA',
+    namedCurve: 'P-256'
+  }, true, ['sign', 'verify']
+)
+// resulting keyPair data structure will be: { privateKey: CrytoKey, publicKey: CryptoKey }
+```
+[More information about SubtleCrypto.generateKey](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/generateKey)
+
+### Exporting Keys
+
+**In Node:**
+```js
+
+```
+
+**On the browser**
+To export a key, use the [SubtleCrypto.exportKey()](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/exportKey) function.
+
+```js
+// export a public key, for storage and sharing with a server
+var publicKeyPem = HttpKeyPairAuthorizer.expotPublicKeyToPemString(
+  keyPair.publicKey,
+)
+
+// export a public key, for storing locally
+var privateKeyPem = HttpKeyPairAuthorizer.expotPrivateKeyToPemString(
+  keyPair.privateKey,
+)
+```
+
+### Importing Keys
+
+**In Node:**
+
+```js
+const privateKeyString: string = '-----BEGIN ENCRYPTED PRIVATE KEY-----\n...'
+const passphrase: string = 'I6lL3W7o3HAnpXldcdWm';  // Create a secret passphrase
+const cipher: string = 'aes-256-cbc'; // pick a hash from cipher.getHashes()
+const privateKey: typeof crypto.PrivateKeyObject = crypto.createPrivateKey({
+  key: privateKeyString,
+  passphrase: passphrase,
+  cipher: cipher
+});
+
+const publicKeyString = '-----BEGIN PUBLIC KEY-----\n...';
+const publicKey: typeof crypto.PublicKeyObject = crypto.createPublicKey({
+  key: publicKeyString,
+  type: 'pkcs1',
+  format: 'pem',
+  encoding: 'base64'
+});
+```
+
+**On the browser**
+
+```js
+// Get a PEM private key, for example this ECDSA P-256 key
+var edcsaP256KeyPem = '-----BEGIN EC PRIVATE KEY-----\n' +
+  'MHcCAQEEIG65UDNLeeH2M0FJMq5sS66Zgbfo5HmeiYvSF0rvx+fLoAoGCCqGSM49\n' +
+  'AwEHoUQDQgAE+YwQJ7xak48kmy4IhOLo3krj998lCeN95dCTA72TWaHQtwMraLPO\n' +
+  'Kc2Z9V6olwQNiezfiSNq83Ln7EL3AOpp9g==\n' +
+  '-----END EC PRIVATE KEY-----'
+
+var algorithmParameters = {
+  name: 'ECDSA',
+  namedCurve: 'P-256'
+}
+
+var privateKey = HttpKeyPairAuthorizer.importPrivateKeyFromPemString(
+  edcsaP256KeyPem,
+  algorithmParameters
+)
+```
+
 ## Send Requests to a Server
 
 Typically requests are sent from a client to a server, but with this authorization mechanism, it is possible to send authorized messages the other way around.
@@ -75,22 +169,25 @@ For added security, the client can create a hash digest of the HTTP body to veri
 
 A client can sign HTTP headers to secure HTTP requests. Each header included provides a different layer of security.
 
-| Header or property | Reason to include                                     |
-|--------------------|-------------------------------------------------------|
-| (request-target)   | Verifies which endpoint the request was intended for  |
-| Host               | Verifies which server the request was intended for    |
-| Date               | Verifies that the request is unique                   |
-| (created)          | Helps verify that the signature was not forged        |
-| (created)          | Helps verify that the signature was not forged        |
-| Digest             | Helps verify the message was not altered              |
-| Content-Length     | Helps verify the message was not altered              |
+| Header or property | Reason to include                                     |Allowed on CORS |
+|--------------------|-------------------------------------------------------|----------------|
+| (request-target)   | Verifies which endpoint the request was intended for  |Yes          |
+| Host               | Verifies which server the request was intended for    |No          |
+| Date               | Verifies that the request is unique                   |No          |
+| (created)          | Helps verify that the signature was not forged        |Yes         |
+| (created)          | Helps verify that the signature was not forged        |Yes         |
+| Digest             | Helps verify the message was not altered              |Yes         |
+| Content-Length     | Helps verify the message was not altered              |No          |
 
 Minimally, the `Date` header should be included in the HTTP request and in the signature creation.
+
+**Note:** On cross-origin requests (CORS), `Date`, `Host`, and `Content-Length` headers are disallowed
 
 #### Default headers example
 
 The default signature will include only the HTTP `Date` header by default. As this header should change with each request, it guarantees that each request has a unique signature.
 
+**In Node:**
 
 ```js
 // if not using in the browser:
@@ -132,9 +229,56 @@ console.log(updatedHttpRequest.headers['Authorization']);
 // 'algorithm="SHA256",keyId="Test",signature="iKKFBCekw5snRmcyEnpWLFXBXG8miig...",headers="date"'
 ```
 
+**On the browser:**
+
+```js
+// Load a private key
+const privateKeyString = '-----BEGIN PRIVATE KEY-----...'
+var privateKey = HttpKeyPairAuthorizer.importPrivateKeyFromPemString(privateKeyString, algorithmParameters)
+
+// Build a HTTP request
+var now = new Date()
+var httpBody = '{"hello": "world"}'
+var httpRequest = {
+  method: 'POST',
+  path: '/foo?param=value&pet=dog'
+  headers: {
+    Date: now.toUTCString(),
+  },
+  body: httpBody
+}
+
+// Define the authorization parameters for building a signature
+// it should be noted that CORS restricts the Date, Host,
+// and Content-Length HTTP headers
+// Do not include them in cross-origin requests
+// keyId is the public key's identifier on the server
+var authorizationParameters = {
+  keyId: 'Test',
+  algorithm: 'SHA256',
+  headers: []
+}
+var digestHashAlgorithm = 'SHA256'
+
+// Update the HTTP request with the header signature
+var updatedHttpRequest;
+HttpKeyPairAuthorizer.createAuthorizationHeader(
+  httpRequest,
+  privateKey,
+  authorizationParameters,
+  digestHashAlgorithm
+).then(response => {
+  updatedHttpRequest = response
+})
+console.log(updatedHttpRequest.headers['Authorization']);
+// 'algorithm="SHA256",keyId="Test",signature="iKKFBCekw5snRmcyEnpWLFXBXG8miig...",headers="date"'
+```
+
 #### Full headers example
 
 This example shows the full headers including a `Digest` (explained below)
+
+**In Node:**
 
 ```js
 // if not using in the browser:
@@ -195,11 +339,75 @@ console.log(updatedHttpRequest.headers['Authorization']);
 // 'algorithm="SHA256",keyId="keyId",signature="iKKFBCekw5snRmcyEnpWLFXBXG8miig...",created=1234567890,expires=1234567890,headers="(request-target) (created) (expires) host date digest content-type content-length"'
 ```
 
+**On the browser:**
+
+```js
+// if not using in the browser:
+// load the private key from memory
+const privateKeyString = '-----BEGIN ENCRYPTED PRIVATE KEY-----...'
+// Load a private key
+var privateKey = HttpKeyPairAuthorizer.importPrivateKeyFromPemString(edcsaP256KeyPem, algorithmParameters)
+
+// Build a HTTP request
+var now = new Date()
+var httpBody = '{"hello": "world"}'
+var httpRequest = {
+  method: 'POST',
+  path: '/foo?param=value&pet=dog'
+  headers: {
+    Host: 'example.com',
+    Date: now.toUTCString(),
+    'Content-Type': 'application/json; encoding=utf-8',
+    'Accept': 'application/json',
+    'Content-Length': (httpBody.length * 2).toString(),
+  },
+  body: httpBody
+}
+
+// Define the authorization parameters for building a signature
+// it should be noted that CORS restricts the Date, Host,
+// and Content-Length HTTP headers
+// Do not include them in cross-origin requests
+// keyId is the public key's identifier on the server
+var authorizationParameters = {
+  keyId: 'Test',
+  algorithm: 'SHA256',
+  created: Math.floor(now / 1000) - (60 * 60 * 24),
+  expires: Math.floor(now / 1000) + (60 * 60 * 24),
+  headers: [
+    '(request-target)',
+    '(created)',
+    '(expires)',
+    'host',
+    'date',
+    'digest',
+    'content-type',
+    'content-length'
+  ]
+}
+var digestHashAlgorithm = 'SHA256'
+
+// Update the HTTP request with the header signature
+var updatedHttpRequest;
+HttpKeyPairAuthorizer.createAuthorizationHeader(
+  httpRequest,
+  privateKey,
+  authorizationParameters,
+  digestHashAlgorithm
+).then(response => {
+  updatedHttpRequest = response
+})
+console.log(updatedHttpRequest.headers['Authorization']);
+// 'algorithm="SHA256",keyId="keyId",signature="iKKFBCekw5snRmcyEnpWLFXBXG8miig...",created=1234567890,expires=1234567890,headers="(request-target) (created) (expires) host date digest content-type content-length"'
+```
+
 ### Create a message digest
 
 A message digest can be created to further validate the message body.
 
 The digest will be included in the `Digest` HTTP header and can be bound to the `Authorization` header to make ensure the digest and message body are cryptographically signed.
+
+**In Node:**
 
 ```js
 // if not using in the browser:
@@ -214,40 +422,44 @@ console.log(digest)
 // SHA256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=
 ```
 
+** In the Browser:**
+
+```js
+var digestHashAlgorithm = 'SHA256'
+HttpKeyPairAuthorizer.createDigestHeader(httpRequest.body, digestHashAlgorithm)
+HttpKeyPairAuthorizer.createDigestHeader(httpRequest.body, digestHashAlgorithm).then(response => {
+  httpRequest.headers['Digest'] = response
+  console.log(response)
+})
+// SHA256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=
+```
 
 ### Using with fetch
 
 ```js
+// it should be noted that with CORS requests,
+// `Date`, 'Host', and `Content-Length` headers are disabled
+// and therefore cannot be included in the signature parameters
 const response = await fetch(
   'http://example.com/foo?param=value&pet=dog', {
-    method: 'POST',
-    headers: {
-      'Host': 'example.com',
-      'Date': now.toUTCString(),
-      'Content-Type': 'application/json; encoding=utf-8',
-      'Accept': 'application/json',
-      'Content-Length': (httpBody.length * 2).toString(),
-      // use one or both of these headers, depending on the server specs
-      'Authorization': authorizationHeader,
-      'Signature': authorizationHeader,
-      // if there is a message digest, put here also
-      'Digest': digest,
-    },
-    body: httpBody
-  }
-)
+  mode: 'cors',
+  headers: httpRequest.headers,
+  body: httpRequest.httpBody
+})
 ```
 
 ### Using with Axios
 
 ```js
-const response = await axios.post(
-  'http://example.com/foo?param=value&pet=dog',
-  httpBody,
-  {
-    headers: httpRequest.headers
-  }
-)
+// it should be noted that with CORS requests,
+// `Date`, 'Host', and `Content-Length` headers are disabled
+// and therefore cannot be included in the signature parameters
+const response = await axios({
+  method: 'POST',
+  url: 'http://example.com/foo?param=value&pet=dog',
+  data: httpBody,
+  headers: { common: httpRequest.headers }
+})
 ```
 
 ### Using with http

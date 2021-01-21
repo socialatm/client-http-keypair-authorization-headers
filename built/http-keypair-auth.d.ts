@@ -30,10 +30,12 @@ export default class HttpKeyPairAuthorizer {
     get privateKeyPassphrase(): string;
     set privateKeyPassphrase(passphrase: string);
     generatePrivateKeyPassphrase(length?: number): string;
-    createSigningMessage(httpRequest: HttpRequest, authorizationParameters?: Record<string, any>, requiredAuthorizationHeaders?: string[]): string;
-    createMessageSignature(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, hashAlgorithm: string, authorizationParameters: Record<string, any>, requiredAuthorizationHeaders?: string[]): string;
-    createAuthorizationHeader(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, keyId: string, hashAlgorithm: string, authorizationParameters: Record<string, any>, requiredAuthorizationHeaders: string[]): string;
+    createSigningMessage(httpRequest: HttpRequest, authorizationParameters?: Record<string, any>): string;
+    createMessageSignature(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string, any>): string;
+    createAuthorizationHeader(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string, any>): string;
     createDigestHeader(text: string, hashAlgorithm: string): string;
+    digestHttpRequest(httpRequest: HttpRequest, hashAlgorithm: string): HttpRequest;
+    signHttpRequest(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string, any>, digestHashAlgorithm?: string): HttpRequest;
     doesDigestVerify(text: string, digest: string): boolean;
     doesSignatureHeaderVerify(header: string, httpRequest: HttpRequest, publicKey: typeof crypto.PublicKeyObject): boolean;
     doesHttpRequestVerify(httpRequest: HttpRequest, publicKey: typeof crypto.PublicKeyObject): boolean;

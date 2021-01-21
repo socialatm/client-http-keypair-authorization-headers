@@ -2,16 +2,24 @@ const crypto = require('crypto')
 const { Hash } = require('crypto')
 const { Sign } = require('crypto')
 // const { PrivateKeyObject, PublicKeyObject } = require('crypto')
+// const { subtle } = require('crypto').webcrypto;
+
 
 exports.printMsg = function () {
   console.log('client-http-drf-keypair-permissions is loaded')
 }
-/*
-interface KeyPair {
-  publicKey: typeof PublicKeyObject;
-  privateKey: typeof PrivateKeyObject;
+
+if (typeof btoa === 'undefined') {
+  global.btoa = function (str) {
+    return new Buffer(str, 'binary').toString('base64');
+  };
 }
-/* */
+
+if (typeof atob === 'undefined') {
+  global.atob = function (b64Encoded) {
+    return new Buffer(b64Encoded, 'base64').toString('binary');
+  };
+}
 
 export interface HttpHeaders {
   [key: string]: string;
@@ -62,7 +70,7 @@ export default class HttpKeyPairAuthorizer {
     this.privateKeyPassphrase = this.generatePrivateKeyPassphrase();
   }
 
-  get privateKeyPassphrase () {
+  get privateKeyPassphrase (): string {
     /**
      * Retrieve the privateKeyPassphrase, used for generating new keypairs
      *
@@ -155,7 +163,6 @@ export default class HttpKeyPairAuthorizer {
      * @param {crypto.PrivateKeyObject} The private key used to create the signature
      * @param {string} the hashing algorithm. Get a list of supported hashing algorithms from crypto.getHashes()
      * @param {Record<string: string>} A dictionary of headers and pseudo-headers which will be used to build the message to be signed
-     * @param {string[]} A list of headers and pseudo-headers to be used to build the signed message
      * @return {string} A signature created from the parameters provided
      */
     const signingMessage: string = this.createSigningMessage(httpRequest, authorizationParameters);
@@ -177,11 +184,7 @@ export default class HttpKeyPairAuthorizer {
      * @return {string} The full Authorization HTTP header including algorithm="", keyId="", signature="", and headers="".
      */
     const signature: string = this.createMessageSignature(httpRequest, privateKey, authorizationParameters);
-    const signatureHeaders: Record<string,any> = {
-      algorithm: authorizationParameters.algorithm,
-      keyId: authorizationParameters.keyId,
-      signature: signature
-    };
+    const signatureHeaders: Record<string,any> = {};
     let authorizationHeaderString: string = '';
     if (authorizationParameters) {
       for (const key in authorizationParameters) {
@@ -195,6 +198,16 @@ export default class HttpKeyPairAuthorizer {
         }).join(' ');
       }
     }
+    if (authorizationParameters.algorithm === 'SHA-1') {
+      signatureHeaders.algorithm = 'RSA-SHA1'
+    } else if (authorizationParameters.algorithm === 'SHA-256') {
+      signatureHeaders.algorithm = 'RSA-SHA256'
+    } else if (authorizationParameters.algorithm === 'SHA-384') {
+      signatureHeaders.algorithm = 'RSA-SHA384'
+    } else if (authorizationParameters.algorithm === 'SHA-512') {
+      signatureHeaders.algorithm = 'RSA-SHA512'
+    }
+    signatureHeaders.signature = signature
     // we can omit the headers="" if it's only Date
     if (authorizationHeaderString !== 'Date') {
       signatureHeaders.headers = authorizationHeaderString;
@@ -226,7 +239,7 @@ export default class HttpKeyPairAuthorizer {
     const digester: typeof Hash = crypto.createHash(hashAlgorithm);
     const digest: string = digester.update(text).digest('base64');
     const header: string = `${hashAlgorithm}=${digest}`;
-    return header
+    return header;
   }
 
   digestHttpRequest(httpRequest: HttpRequest, hashAlgorithm: string) {
@@ -241,7 +254,7 @@ export default class HttpKeyPairAuthorizer {
      return httpRequest;
   }
 
-  signHttpRequest(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string,any>, digestHashAlgorithm?: string) {
+  signHttpRequest(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string,any>, digestHashAlgorithm?: string): HttpRequest {
     /**
      * Create a signed authorization header (and possibly a digest) and place it in the HttpRequest.
      *
@@ -262,7 +275,7 @@ export default class HttpKeyPairAuthorizer {
     return httpRequest;
   }
 
-  doesDigestVerify (text: string, digest: string) {
+  doesDigestVerify (text: string, digest: string): boolean {
     /**
      * Verify the digest header.
      *
@@ -339,14 +352,23 @@ export default class HttpKeyPairAuthorizer {
     const authorizationHeader = httpRequest.headers['Authorization'];
     const signatureHeader = httpRequest.headers['Signature'];
     const digestHeader = httpRequest.headers['Digest'];
-    if (!authorizationHeader) {
+    // There may be either an Authorization or a Signature
+    if (!authorizationHeader && !signatureHeader) {
       return false;
     }
-    if (!signatureHeader) {
-      return false;
-    }
-    if (authorizationHeader != signatureHeader) {
-      return false;
+    let header;
+    // if there are both an Authorization and Signature, they should match
+    if (authorizationHeader && signatureHeader) {
+      if (authorizationHeader != signatureHeader) {
+        return false;
+      }
+      header = authorizationHeader
+    } else {
+      if (authorizationHeader) {
+        header = authorizationHeader
+      } else if (signatureHeader) {
+        header = signatureHeader
+      }
     }
     if (digestHeader) {
       const doesDigestVerify: boolean = this.doesDigestVerify(httpRequest.body, digestHeader);
