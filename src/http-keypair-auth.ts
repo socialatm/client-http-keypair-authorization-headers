@@ -6,7 +6,7 @@ const { Sign } = require('crypto')
 
 
 exports.printMsg = function () {
-  console.log('client-http-drf-keypair-permissions is loaded')
+  console.log('client-http-keypair-authorization is loaded')
 }
 
 if (typeof btoa === 'undefined') {
@@ -53,66 +53,7 @@ export interface HttpRequest {
  */
 export default class HttpKeyPairAuthorizer {
 
-  public modulusLength: number  = 4096;
-  public publicKeyType: string = 'spki';
-  public privateKeyType: string = 'pkcs8';
-  public privateKeyFormat: string = 'pem';
-  /* Access supported ciphers with `crypto.getCiphers()` */
-  public privateKeyCipher: string = 'aes-256-cbc';
-  private __privateKeyPassphrase: string;
-
-  public defaultPassphraseLength: number = 20;
-
-  constructor () {
-    /**
-     * Create a new CavageHttpAuthorizer
-     */
-    this.privateKeyPassphrase = this.generatePrivateKeyPassphrase();
-  }
-
-  get privateKeyPassphrase (): string {
-    /**
-     * Retrieve the privateKeyPassphrase, used for generating new keypairs
-     *
-     * @return {string} the instance's private key passphrase
-     */
-    return this.__privateKeyPassphrase;
-  }
-
-  set privateKeyPassphrase (passphrase: string) {
-    /**
-     * Set the instance's private key passphrase for generating new keypairs
-     *
-     * @param {string} set the instance's passphrase. A null value will generate a random passphrase
-     */
-    if (passphrase) {
-      this.__privateKeyPassphrase = this.generatePrivateKeyPassphrase(this.defaultPassphraseLength);
-    } else {
-      this.__privateKeyPassphrase = passphrase;
-    }
-  }
-
-  generatePrivateKeyPassphrase (length=20): string {
-    /**
-     * Generate a new private key passphrase
-     *
-     * @public
-     * @param {length=} the character length of the passphrase
-     * @return {string} a passphrase
-     */
-    if (length == undefined) {
-      length = this.defaultPassphraseLength;
-    }
-    let result: string = '';
-    const characters: string = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()';
-    const charactersLength: number = characters.length;
-    for (let i = 0; i < length; i++) {
-      result += characters.charAt(Math.floor(Math.random() * charactersLength));
-    }
-    return result;
-  }
-
-  createSigningMessage(httpRequest: HttpRequest, authorizationParameters?: Record<string,any>): string {
+  static createSigningMessage(httpRequest: HttpRequest, authorizationParameters?: Record<string,any>): string {
     /**
      * Create the string that will be signed, from the HTTP headers.
      *
@@ -130,7 +71,7 @@ export default class HttpKeyPairAuthorizer {
         const header: string = requiredAuthorizationHeaders[i];
         if (header[0] === '(') {
           if (header === '(request-target)') {
-            const requestTarget = this.__getRequestTarget(httpRequest);
+            const requestTarget = HttpKeyPairAuthorizer.__getRequestTarget(httpRequest);
             signingRows.push(`${header}: ${requestTarget}`)
           } else {
             const cleanedHeader: string = header.substring(1, header.length - 1)
@@ -154,7 +95,7 @@ export default class HttpKeyPairAuthorizer {
     return signingMessage
   }
 
-  createMessageSignature (httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string,any>): string {
+  static createMessageSignature (httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string,any>): string {
     /**
      * Create the message signature
      *
@@ -165,7 +106,7 @@ export default class HttpKeyPairAuthorizer {
      * @param {Record<string: string>} A dictionary of headers and pseudo-headers which will be used to build the message to be signed
      * @return {string} A signature created from the parameters provided
      */
-    const signingMessage: string = this.createSigningMessage(httpRequest, authorizationParameters);
+    const signingMessage: string = HttpKeyPairAuthorizer.createSigningMessage(httpRequest, authorizationParameters);
     const signer: typeof crypto.Sign = crypto.createSign(authorizationParameters.algorithm);
     signer.update(signingMessage);
     signer.end();
@@ -173,7 +114,7 @@ export default class HttpKeyPairAuthorizer {
     return signature;
   }
 
-  createAuthorizationHeader (httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string,any>): string {
+  static createAuthorizationHeader (httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string,any>): string {
     /**
      * Sign message. Algorithms are available at
      *
@@ -183,7 +124,7 @@ export default class HttpKeyPairAuthorizer {
      * @param {string[]} The header keys to be included in the authorization signature
      * @return {string} The full Authorization HTTP header including algorithm="", keyId="", signature="", and headers="".
      */
-    const signature: string = this.createMessageSignature(httpRequest, privateKey, authorizationParameters);
+    const signature: string = HttpKeyPairAuthorizer.createMessageSignature(httpRequest, privateKey, authorizationParameters);
     const signatureHeaders: Record<string,any> = {};
     let authorizationHeaderString: string = '';
     if (authorizationParameters) {
@@ -227,7 +168,7 @@ export default class HttpKeyPairAuthorizer {
     return header;
   }
 
-  createDigestHeader (text: string, hashAlgorithm: string): string {
+  static createDigestHeader (text: string, hashAlgorithm: string): string {
     /**
      * Create a digest from a string. hashes are available at crypt.getHashes()
      *
@@ -242,7 +183,7 @@ export default class HttpKeyPairAuthorizer {
     return header;
   }
 
-  digestHttpRequest(httpRequest: HttpRequest, hashAlgorithm: string) {
+  static digestHttpRequest(httpRequest: HttpRequest, hashAlgorithm: string) {
     /**
      * Create a digest header on a httpRequest
      *
@@ -250,11 +191,11 @@ export default class HttpKeyPairAuthorizer {
      * @param {string} the hash algorithm. Get supported algorithmsfrom `crypto.getHashes()`
      * @return {HttpRequest} An updated dictionary with a `Digest` header
      */
-     httpRequest.headers['Digest'] = this.createDigestHeader(httpRequest.body, hashAlgorithm);
+     httpRequest.headers['Digest'] = HttpKeyPairAuthorizer.createDigestHeader(httpRequest.body, hashAlgorithm);
      return httpRequest;
   }
 
-  signHttpRequest(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string,any>, digestHashAlgorithm?: string): HttpRequest {
+  static signHttpRequest(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string,any>, digestHashAlgorithm?: string): HttpRequest {
     /**
      * Create a signed authorization header (and possibly a digest) and place it in the HttpRequest.
      *
@@ -267,15 +208,15 @@ export default class HttpKeyPairAuthorizer {
      * @return {HttpRequest} The updated dictionary with `Authorization` and `Signature` headers, and possibly a `Digest` header
      */
     if (digestHashAlgorithm) {
-      httpRequest.headers['Digest'] = this.createDigestHeader(httpRequest.body, digestHashAlgorithm);
+      httpRequest.headers['Digest'] = HttpKeyPairAuthorizer.createDigestHeader(httpRequest.body, digestHashAlgorithm);
     }
-    const authorizationHeader: string = this.createAuthorizationHeader(httpRequest, privateKey, authorizationParameters);
+    const authorizationHeader: string = HttpKeyPairAuthorizer.createAuthorizationHeader(httpRequest, privateKey, authorizationParameters);
     httpRequest.headers['Authorization'] = authorizationHeader;
     httpRequest.headers['Signature'] = authorizationHeader;
     return httpRequest;
   }
 
-  doesDigestVerify (text: string, digest: string): boolean {
+  static doesDigestVerify (text: string, digest: string): boolean {
     /**
      * Verify the digest header.
      *
@@ -287,12 +228,12 @@ export default class HttpKeyPairAuthorizer {
     const splitPoint: number = digest.indexOf('=');
     const hashAlgorithm: string = digest.substring(0, splitPoint);
     const base64DigestString: string = digest.substring(splitPoint + 1)
-    const expectedDigestHeader: string = this.createDigestHeader(text, hashAlgorithm)
+    const expectedDigestHeader: string = HttpKeyPairAuthorizer.createDigestHeader(text, hashAlgorithm)
     const doesVerify: boolean = (digest == expectedDigestHeader);
     return doesVerify;
   }
 
-  doesSignatureHeaderVerify (header: string, httpRequest: HttpRequest, publicKey: typeof crypto.PublicKeyObject): boolean {
+  static doesSignatureHeaderVerify (header: string, httpRequest: HttpRequest, publicKey: typeof crypto.PublicKeyObject): boolean {
     /**
      * Verifies a HTTP keypair authorization signature against a locally stored public key
      *
@@ -302,10 +243,10 @@ export default class HttpKeyPairAuthorizer {
      * @param {crypto.PublicKeyObject} A public key to verify the signature
      * @return {boolean} `true` if signature verifies, `false` otherwise
      */
-     // const requestTarget: string = this.__getRequestTarget(httpRequest);
-     const authorizationParameters: Record<string,any> = this.getAuthorizationParametersFromSignatureHeader(header);
+     // const requestTarget: string = HttpKeyPairAuthorizer.__getRequestTarget(httpRequest);
+     const authorizationParameters: Record<string,any> = HttpKeyPairAuthorizer.getAuthorizationParametersFromSignatureHeader(header);
      const requiredAuthorizationHeaders: string[] = authorizationParameters.headers;
-     const currentTimestamp: number = Math.floor(Date.now() / 1000) - (60 * 60 * 24);
+     const currentTimestamp: number = Math.floor(Date.now() / 1000);
      // if an authorizationParameters.created exists, make sure it's not in the future
      if (requiredAuthorizationHeaders.includes('(created)')) {
        if (!authorizationParameters.created) {
@@ -319,7 +260,7 @@ export default class HttpKeyPairAuthorizer {
      }
      // if an authorizationParameters.expires exists, make sure it's not in the past
      if (requiredAuthorizationHeaders.includes('(expires)')) {
-       if (!authorizationParameters.created) {
+       if (!authorizationParameters.expires) {
          return false;
        } else {
          const expires: number = parseInt(authorizationParameters.expires)
@@ -328,7 +269,7 @@ export default class HttpKeyPairAuthorizer {
          }
        }
      }
-     const signingMessage = this.createSigningMessage(httpRequest, authorizationParameters);
+     const signingMessage = HttpKeyPairAuthorizer.createSigningMessage(httpRequest, authorizationParameters);
      const doesVerify = crypto.verify(
        authorizationParameters.algorithm,
        Buffer.from(signingMessage),
@@ -340,7 +281,7 @@ export default class HttpKeyPairAuthorizer {
      return doesVerify;
   }
 
-  doesHttpRequestVerify (httpRequest: HttpRequest, publicKey: typeof crypto.PublicKeyObject): boolean {
+  static doesHttpRequestVerify (httpRequest: HttpRequest, publicKey: typeof crypto.PublicKeyObject): boolean {
     /**
      * Verify an entire HttpRequest.  There should be identical `Authorization` and `Signature` headers
      *
@@ -371,15 +312,15 @@ export default class HttpKeyPairAuthorizer {
       }
     }
     if (digestHeader) {
-      const doesDigestVerify: boolean = this.doesDigestVerify(httpRequest.body, digestHeader);
+      const doesDigestVerify: boolean = HttpKeyPairAuthorizer.doesDigestVerify(httpRequest.body, digestHeader);
       if (!doesDigestVerify) {
         return false;
       }
     }
-    return this.doesSignatureHeaderVerify(authorizationHeader, httpRequest, publicKey);
+    return HttpKeyPairAuthorizer.doesSignatureHeaderVerify(authorizationHeader, httpRequest, publicKey);
   }
 
-  getAuthorizationParametersFromSignatureHeader(signatureHeader: string): Record<string,any> {
+  static getAuthorizationParametersFromSignatureHeader(signatureHeader: string): Record<string,any> {
     /**
      * Convert a raw signature header to its component data
      *
@@ -422,7 +363,7 @@ export default class HttpKeyPairAuthorizer {
     /* */
   }
 
-  __getRequestTarget(httpRequest: HttpRequest): string {
+  static __getRequestTarget(httpRequest: HttpRequest): string {
     /**
      * Build an authorization-compatible (request-target) string, such as 'post /path/to/endpoint?query=param'
      *
@@ -433,7 +374,75 @@ export default class HttpKeyPairAuthorizer {
     return `${httpRequest.method.toLowerCase()} ${httpRequest.path}`;
   }
 
+  static exportPrivateKeyToPemString (privateKey: typeof crypto.PrivateKeyObject): string {
+    /**
+     * Export a private key to a PKCS #8 compatible PEM string
+     *
+     * @public
+     * @param {crrypto.PrivateKey} a private key
+     * @return {string}
+     */
+     let type: string = '';
+     if (privateKey.asymmetricKeyType == 'rsa') {
+       type = 'pkcs1'
+     } else {
+       type = 'spki'
+     }
+     const privateKeyPem = privateKey.export({
+         type: type,
+         format: 'pem'
+     })
+     return privateKeyPem
+  }
+
+  static exportPublicKeyToPemString (publicKey: typeof crypto.PublicKeyObject): string {
+    /**
+     * Export a public key to a SPKI compatible PEM string
+     *
+     * @public
+     * @param {crypto.PublicKey} a public key
+     * @return {string}
+     */
+     const publicKeyPem = publicKey.export({
+         type: 'spki',
+         format: 'pem'
+     })
+     return publicKeyPem
+  }
+
+  static importPrivateKeyFromPemString (pemString: string, algorithmParameters: any): typeof crypto.PrivateKeyObject {
+    /**
+     * Import a CryptoKey private key from a PKCS #8 compatible PEM string.
+     *
+     * @public
+     * @param {string} The PKCS #8 encoded PEM string
+     * @param {any} The name of the algorithm or a dictionary of algorithm parameters such as {name: hash: }. See [SubtleCrypto.importKey() Supported Formats](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey#supported_formats) for more information
+     * @return {Promise} that's resolved with a {CryptoKey}
+     */
+     const privateKey: typeof crypto.PrivateKeyObject = crypto.createPrivateKey({
+       key: pemString,
+       format: 'pem',
+       encoding: 'utf-8'
+     });
+     return privateKey;
+  }
+
+  static importPublicKeyFromPemString (pemString: string, algorithmParameters: any): typeof crypto.PublicKeyObject {
+    /**
+     * Import a CryptoKey public key from a SPKI compatible PEM string.
+     *
+     * @public
+     * @param {string} The SPKI encoded PEM string
+     * @param {any} The name of the algorithm or a dictionary of algorithm parameters such as {name: hash: }. See [SubtleCrypto.importKey() Supported Formats](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey#supported_formats) for more information
+     * @return {Promise} that's resolved with a {CryptoKey}
+     */
+     const publicKey: typeof crypto.PublicKeyObject = crypto.createPublicKey({
+       key: pemString,
+       format: 'pem',
+       type: 'spki',
+       encoding: 'utf-8'
+     })
+     return publicKey;
+  }
+
 }
-
-
-// const auth = CavageHttpAuthorizer()

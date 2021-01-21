@@ -19,27 +19,16 @@ export interface HttpRequest {
     body: string;
 }
 export default class HttpKeyPairAuthorizer {
-    modulusLength: number;
-    publicKeyType: string;
-    privateKeyType: string;
-    privateKeyFormat: string;
-    privateKeyCipher: string;
-    private __privateKeyPassphrase;
-    defaultPassphraseLength: number;
-    constructor();
-    get privateKeyPassphrase(): string;
-    set privateKeyPassphrase(passphrase: string);
-    generatePrivateKeyPassphrase(length?: number): string;
-    createSigningMessage(httpRequest: HttpRequest, authorizationParameters?: Record<string, any>): string;
-    createMessageSignature(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string, any>): string;
-    createAuthorizationHeader(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string, any>): string;
-    createDigestHeader(text: string, hashAlgorithm: string): string;
-    digestHttpRequest(httpRequest: HttpRequest, hashAlgorithm: string): HttpRequest;
-    signHttpRequest(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string, any>, digestHashAlgorithm?: string): HttpRequest;
-    doesDigestVerify(text: string, digest: string): boolean;
-    doesSignatureHeaderVerify(header: string, httpRequest: HttpRequest, publicKey: typeof crypto.PublicKeyObject): boolean;
-    doesHttpRequestVerify(httpRequest: HttpRequest, publicKey: typeof crypto.PublicKeyObject): boolean;
-    getAuthorizationParametersFromSignatureHeader(signatureHeader: string): Record<string, any>;
-    __getRequestTarget(httpRequest: HttpRequest): string;
+    static createSigningMessage(httpRequest: HttpRequest, authorizationParameters?: Record<string, any>): string;
+    static createMessageSignature(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string, any>): string;
+    static createAuthorizationHeader(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string, any>): string;
+    static createDigestHeader(text: string, hashAlgorithm: string): string;
+    static digestHttpRequest(httpRequest: HttpRequest, hashAlgorithm: string): HttpRequest;
+    static signHttpRequest(httpRequest: HttpRequest, privateKey: typeof crypto.PrivateKeyObject, authorizationParameters: Record<string, any>, digestHashAlgorithm?: string): HttpRequest;
+    static doesDigestVerify(text: string, digest: string): boolean;
+    static doesSignatureHeaderVerify(header: string, httpRequest: HttpRequest, publicKey: typeof crypto.PublicKeyObject): boolean;
+    static doesHttpRequestVerify(httpRequest: HttpRequest, publicKey: typeof crypto.PublicKeyObject): boolean;
+    static getAuthorizationParametersFromSignatureHeader(signatureHeader: string): Record<string, any>;
+    static __getRequestTarget(httpRequest: HttpRequest): string;
 }
 export {};

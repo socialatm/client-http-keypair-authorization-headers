@@ -12,9 +12,6 @@ const HttpKeyPairAuthorizer = require('../src/http-keypair-auth').default;
 const deepEqualInAnyOrder = require('deep-equal-in-any-order');
 chai.use(deepEqualInAnyOrder);
 
-
-const authorizer: typeof HttpKeyPairAuthorizer = new HttpKeyPairAuthorizer();
-
 const privateKeyString: string = '-----BEGIN ENCRYPTED PRIVATE KEY-----\n' +
   'MIIJrTBXBgkqhkiG9w0BBQ0wSjApBgkqhkiG9w0BBQwwHAQIej8JDk4bMdACAggA\n' +
   'MAwGCCqGSIb3DQIJBQAwHQYJYIZIAWUDBAEqBBAY83XsD0u5RwuHaZ4YYM/4BIIJ\n' +
@@ -73,8 +70,10 @@ const passphrase: string = 'I6lL3W7o3HAnpXldcdWm';
 const cipher: string = '';
 const privateKey: typeof crypto.PrivateKeyObject = crypto.createPrivateKey({
   key: privateKeyString,
+  format: 'pem',
+  type: 'pkcs8',
   passphrase: passphrase,
-  cipher: authorizer.privateKeyCipher
+  encoding: 'utf-8'
 });
 
 const publicKeyString: string = '-----BEGIN PUBLIC KEY-----\n' +
@@ -93,10 +92,10 @@ const publicKeyString: string = '-----BEGIN PUBLIC KEY-----\n' +
   '-----END PUBLIC KEY-----\n';
 const publicKey: typeof crypto.PublicKeyObject = crypto.createPublicKey({
   key: publicKeyString,
-  type: 'pkcs1',
   format: 'pem',
-  encoding: 'base64'
-});
+  type: 'spki',
+  encoding: 'utf-8'
+})
 const keyId: string = 'keyId';
 
 describe('Gets (request-target) from HttpRequest', () => {
@@ -108,55 +107,28 @@ describe('Gets (request-target) from HttpRequest', () => {
   };
   const expectedRequestTarget: string = 'get /foo?param=value&pet=dog';
   it('Can create a (request-target) from HttpRequest', () => {
-    const requestTarget: string = authorizer.__getRequestTarget(httpRequest);
+    const requestTarget: string = HttpKeyPairAuthorizer.__getRequestTarget(httpRequest);
     requestTarget.should.equal(expectedRequestTarget);
   });
 });
 
-describe('Passphrase', () => {
-  describe('Generate passphrase:', () => {
-    const passphrase: string = authorizer.generatePrivateKeyPassphrase();
-    it('passphrases should exist', () => {
-      passphrase.should.exist;
-    });
-    it('passphrases should be a string', () => {
-      const passphraseType: string = typeof(passphrase);
-      passphraseType.should.equal('string');
-    });
-    it('passphrases should be of length `.defaultPassphraseLength`', () => {
-      passphrase.length.should.equal(authorizer.defaultPassphraseLength)
-    });
-  })
-  describe('Save passphrase:', () => {
-    const authorizer: typeof HttpKeyPairAuthorizer = new HttpKeyPairAuthorizer();
-    it ('can store a passphrase', () => {
-      const passphrase: string = authorizer.generatePrivateKeyPassphrase();
-      authorizer.privateKeyPassphrase = passphrase;
-      it('passphrases should match', () => {
-        passphrase.should.equal(authorizer.passphrase);
-      })
-    });
-  });
-});
-
 describe('Digests', () => {
-    const authorizer: typeof HttpKeyPairAuthorizer = new HttpKeyPairAuthorizer();
     const staticDigestHeader: string = 'SHA256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=';
     const httpBody: string = '{"hello": "world"}';
     describe(`Can create a digest from a HttpRequest body`, () => {
       const hashAlgorithm: string = 'SHA256';
-      const digest: string = authorizer.createDigestHeader(httpBody, hashAlgorithm);
+      const digest: string = HttpKeyPairAuthorizer.createDigestHeader(httpBody, hashAlgorithm);
       it(`Generates valid ${hashAlgorithm} hash`, () => {
         digest.should.equal(staticDigestHeader)
       });
     });
     describe(`Verifies digests`, () => {
-      const goodDigest: string = authorizer.doesDigestVerify(httpBody, staticDigestHeader);
+      const goodDigest: string = HttpKeyPairAuthorizer.doesDigestVerify(httpBody, staticDigestHeader);
       it(`Matching digests return true`, () => {
         goodDigest.should.be.true;
       });
       const alteredHttpBody: string = '{"goodbye": "world"}';
-      const badDigest: string = authorizer.doesDigestVerify(alteredHttpBody, staticDigestHeader);
+      const badDigest: string = HttpKeyPairAuthorizer.doesDigestVerify(alteredHttpBody, staticDigestHeader);
       it(`Mismatched digest returns false`, () => {
         badDigest.should.be.false;
       });
@@ -179,7 +151,7 @@ describe('Signing messages', () => {
     };
     it('Error thrown', () => {
       expect(() => {
-        authorizer.createSigningMessage(
+        HttpKeyPairAuthorizer.createSigningMessage(
           httpRequest,
           authorizationParameters
         )
@@ -200,7 +172,7 @@ describe('Signing messages', () => {
       keyId: keyId,
       algorithm: 'rsa-sha256'
     };
-    const signingMessage: string = authorizer.createSigningMessage(httpRequest, authorizationParameters);
+    const signingMessage: string = HttpKeyPairAuthorizer.createSigningMessage(httpRequest, authorizationParameters);
     it('message verifies', () => {
       const expectedSigningMessage = `date: Mon, 11 Jan 2021 20:54:32 GMT`
       signingMessage.should.equal(expectedSigningMessage);
@@ -229,7 +201,7 @@ describe('Signing messages', () => {
         'date',
       ]
     };
-    const signingMessage: string = authorizer.createSigningMessage(httpRequest, authorizationParameters);
+    const signingMessage: string = HttpKeyPairAuthorizer.createSigningMessage(httpRequest, authorizationParameters);
     it('message verifies', () => {
       const expectedSigningMessage: string = `(request-target): get /foo?param=value&pet=dog
 host: example.com
@@ -268,7 +240,7 @@ date: Mon, 11 Jan 2021 20:54:32 GMT`;
         'content-length'
       ]
     };
-    const signingMessage: string = authorizer.createSigningMessage(httpRequest, authorizationParameters);
+    const signingMessage: string = HttpKeyPairAuthorizer.createSigningMessage(httpRequest, authorizationParameters);
     it('message verifies', () => {
       const expectedSigningMessage: string = `(request-target): get /foo?param=value&pet=dog
 (created): ${createdTimestamp}
@@ -294,7 +266,7 @@ describe('HTTP authorization signatures', () => {
         ],
         signature: 'abc123'
       }
-      const result: Record<string,any> = authorizer.getAuthorizationParametersFromSignatureHeader(signature);
+      const result: Record<string,any> = HttpKeyPairAuthorizer.getAuthorizationParametersFromSignatureHeader(signature);
       expect(result).to.deep.equalInAnyOrder(expectedResult);
     });
     it('Parses "basic" signature', () => {
@@ -309,7 +281,7 @@ describe('HTTP authorization signatures', () => {
         ],
         signature: 'abc123'
       }
-      const result: Record<string,any> = authorizer.getAuthorizationParametersFromSignatureHeader(signature);
+      const result: Record<string,any> = HttpKeyPairAuthorizer.getAuthorizationParametersFromSignatureHeader(signature);
       expect(result).to.deep.equalInAnyOrder(expectedResult);
     });
     it('Parses "all headers" signature', () => {
@@ -331,7 +303,7 @@ describe('HTTP authorization signatures', () => {
         ],
         signature: 'abc123'
       }
-      const result: Record<string,any> = authorizer.getAuthorizationParametersFromSignatureHeader(signature);
+      const result: Record<string,any> = HttpKeyPairAuthorizer.getAuthorizationParametersFromSignatureHeader(signature);
       expect(result).to.deep.equalInAnyOrder(expectedResult);
     });
   })
@@ -368,7 +340,7 @@ describe('Message signatures', () => {
         'content-length'
       ]
     };
-    const messageSignature: string = authorizer.createMessageSignature(
+    const messageSignature: string = HttpKeyPairAuthorizer.createMessageSignature(
       httpRequest,
       privateKey,
       authorizationParameters
@@ -413,7 +385,7 @@ describe('Message signatures', () => {
           'e-tag',
         ]
       };
-      const header: string = authorizer.createAuthorizationHeader(
+      const header: string = HttpKeyPairAuthorizer.createAuthorizationHeader(
         httpRequest,
         privateKey,
         authorizationParameters
@@ -430,7 +402,7 @@ describe('Message signatures', () => {
         },
         body: httpBody
       };
-      const doesVerify: string = authorizer.doesSignatureHeaderVerify(
+      const doesVerify: string = HttpKeyPairAuthorizer.doesSignatureHeaderVerify(
         header,
         httpRequest,
         publicKey
@@ -462,13 +434,13 @@ describe('Message signatures', () => {
           'content-length',
         ]
       };
-      let header: string = authorizer.createAuthorizationHeader(
+      let header: string = HttpKeyPairAuthorizer.createAuthorizationHeader(
         httpRequest,
         privateKey,
         authorizationParameters
       );
       header = `${header.substring(0, header.length - 1)} (created)"`;
-      const doesVerify: string = authorizer.doesSignatureHeaderVerify(
+      const doesVerify: string = HttpKeyPairAuthorizer.doesSignatureHeaderVerify(
         header,
         httpRequest,
         publicKey
@@ -496,12 +468,12 @@ describe('Message signatures', () => {
           '(created)'
         ]
       };
-      const header: string = authorizer.createAuthorizationHeader(
+      const header: string = HttpKeyPairAuthorizer.createAuthorizationHeader(
         httpRequest,
         privateKey,
         authorizationParameters
       );
-      const doesVerify: string = authorizer.doesSignatureHeaderVerify(
+      const doesVerify: string = HttpKeyPairAuthorizer.doesSignatureHeaderVerify(
         header,
         httpRequest,
         publicKey
@@ -525,12 +497,12 @@ describe('Message signatures', () => {
           '(expires)'
         ]
       };
-      const header: string = authorizer.createAuthorizationHeader(
+      const header: string = HttpKeyPairAuthorizer.createAuthorizationHeader(
         httpRequest,
         privateKey,
         authorizationParameters
       );
-      const doesVerify: string = authorizer.doesSignatureHeaderVerify(
+      const doesVerify: string = HttpKeyPairAuthorizer.doesSignatureHeaderVerify(
         header,
         httpRequest,
         publicKey
@@ -550,13 +522,13 @@ describe('Message signatures', () => {
         keyId: keyId,
         algorithm: hashAlgorithm
       };
-      const header: string = authorizer.createAuthorizationHeader(
+      const header: string = HttpKeyPairAuthorizer.createAuthorizationHeader(
         httpRequest,
         privateKey,
         authorizationParameters
       );
       httpRequest.headers = {};
-      const doesVerify: string = authorizer.doesSignatureHeaderVerify(
+      const doesVerify: string = HttpKeyPairAuthorizer.doesSignatureHeaderVerify(
         header,
         httpRequest,
         publicKey
@@ -573,7 +545,7 @@ describe('Message signatures', () => {
         body: httpBody
       };
       const staticHeader: string = 'Signature algorithm="SHA256",keyId="keyId",signature="wGSJE1xujF5WpDyfcOOBCwmgeFV9o6vGwLljc9wcsGUiI2uyHDQN/2CI+YleFT2sR+znOb1imEjJ/QjGxZwGR1IaeHu4x/+eJUVeerCAlQqW7LJDVdsaW9P2A+T+L5Ev6Vcn4CA+Kv/gdulYhUl+uQ2ZcusMMMQjInq7d+DbyM4MNC+GK+TJpbpzJoVAOu6L7A5B02nJ8Nezz5bwo39iavRXCtekk7j7x+j7KwXyCTSKUcvX9ext6+IByrlaGFXGzmUc94WtYBSVfu1rh0gWQdUeklfIq4KlFQjQQAEpQJSbY2OWVpWT0o12NPC3heaFT7l7viy+g/+5/273nJjZCxjGUBbMZkb1Sc96LWVL23hhr5rYZ3CjVc+Q1OVi/uSkATrR3Ovl1y5kfjgw/QrB4OQ9oT+u4hU//1Pqindp1mOwnlJXG2HObl+vBfgxrKd31eJ2q1uXfjSd0rrWpfAoWxBF2lcmp4eLBQpWTe9m4h/EWhacxRhAYvefkszpA4HY5rNUYTECbjK5NPMYJ2fe5nBTAAQkvg3O3+aRm6KQLU2LPlfxKDCHN9vLwD2DWYzY78ndEX4cPvA6NevBlE7ZUcfnCwxmKwQpeU6hJs980RNjSFfG3MZxQJxfBn5N4K5qGzjcwDpGRKmCY79NnOEfu0MJtSFSKZszVOcEwr9/Tck=",created=1610398006,expires=1610570806,headers="(request-target) (created) (expires) host date content-type content-length"';
-      const doesVerify: string = authorizer.doesSignatureHeaderVerify(
+      const doesVerify: string = HttpKeyPairAuthorizer.doesSignatureHeaderVerify(
         staticHeader,
         httpRequest,
         publicKey
@@ -609,12 +581,12 @@ describe('Message signatures', () => {
           'content-length',
         ]
       };
-      const staticSignature: string = authorizer.createAuthorizationHeader(
+      const staticSignature: string = HttpKeyPairAuthorizer.createAuthorizationHeader(
         httpRequest,
         privateKey,
         authorizationParameters
       );
-      const doesVerify: string = authorizer.doesSignatureHeaderVerify(
+      const doesVerify: string = HttpKeyPairAuthorizer.doesSignatureHeaderVerify(
         staticSignature,
         httpRequest,
         publicKey
@@ -632,7 +604,7 @@ describe('Message signatures', () => {
           'Date': 'Mon, 11 Jan 2021 20:54:32 GMT',
           'Content-Type': 'application/json; encoding=utf-8',
           'Content-Length': httpBody.length * 2,
-          'Digest': authorizer.createDigestHeader(httpBody, 'SHA256')
+          'Digest': HttpKeyPairAuthorizer.createDigestHeader(httpBody, 'SHA256')
         },
         body: httpBody
       };
@@ -654,14 +626,14 @@ describe('Message signatures', () => {
           'digest'
         ]
       };
-      const signature: string = authorizer.createAuthorizationHeader(
+      const signature: string = HttpKeyPairAuthorizer.createAuthorizationHeader(
         httpRequest,
         privateKey,
         authorizationParameters
       );
       httpRequest.headers['Authorization'] = signature
       httpRequest.headers['Signature'] = signature
-      const doesVerify: string = authorizer.doesHttpRequestVerify(
+      const doesVerify: string = HttpKeyPairAuthorizer.doesHttpRequestVerify(
         httpRequest,
         publicKey
       );
@@ -696,14 +668,14 @@ describe('Message signatures', () => {
           'content-length',
         ]
       };
-      const signature: string = authorizer.createAuthorizationHeader(
+      const signature: string = HttpKeyPairAuthorizer.createAuthorizationHeader(
         httpRequest,
         privateKey,
         authorizationParameters
       );
       httpRequest.headers['Authorization'] = signature
       httpRequest.headers['Signature'] = signature + '-'
-      const doesVerify: string = authorizer.doesHttpRequestVerify(
+      const doesVerify: string = HttpKeyPairAuthorizer.doesHttpRequestVerify(
         httpRequest,
         publicKey
       );
@@ -738,7 +710,7 @@ describe('Message signatures', () => {
           'content-length',
         ]
       };
-      const signature: string = authorizer.createAuthorizationHeader(
+      const signature: string = HttpKeyPairAuthorizer.createAuthorizationHeader(
         httpRequest,
         privateKey,
         authorizationParameters
@@ -746,7 +718,7 @@ describe('Message signatures', () => {
       httpRequest.headers['Authorization'] = signature
       httpRequest.headers['Signature'] = signature
       httpRequest.headers['Host'] = 'anotherexample.com'
-      const doesVerify: string = authorizer.doesHttpRequestVerify(
+      const doesVerify: string = HttpKeyPairAuthorizer.doesHttpRequestVerify(
         httpRequest,
         publicKey
       );
@@ -787,7 +759,7 @@ describe('Http authorization headers', () => {
       'content-length'
     ]
   };
-  const header: string = authorizer.createAuthorizationHeader(
+  const header: string = HttpKeyPairAuthorizer.createAuthorizationHeader(
     httpRequest,
     privateKey,
     authorizationParameters
@@ -798,7 +770,7 @@ describe('Http authorization headers', () => {
       headerType.should.equal('string');
     });
     it('signature is valid', () => {
-      const expectedHeader = 'Signature algorithm="SHA256",keyId="keyId",signature="BCekw5snRmcyEnpWLFiKKFXBXG8miig5EhvQs9Da6mLedOOzrnt+1u5OViFgFn2tqGEHgCdDNebp/+AWQFVpUSO1NpUDmYkvw0IHQNH6JBgKEn6AsyiWEV/SK48ZHElwYU8yjVH3ZBwCPYgkVAIldyDJrSHCKNY8AlayC+OwZwm05Zm/oJkobbyU/j5v27VmfyE1NJ7YnZjssuQmIN67wkKcwkGyHTh4fCQcmBQo4YbfjOHVL/vX7zabmEiWLfGbdNVCq9oN+gAP7dDeQxM5KOW4v/HTH1MP3eFYZoWRZitOlNFBHIBRa0KKqnWB43oM7IN1jSrmgIgcx64UxvSJPrjX4JKygFlaqXgKD8EBYqEU85mf1XGIWvzfP3stsDfuL5XxG8bDg41EnshBgkYYXbdgUeQ4sSoQiGvT8IX2JbZrohQdmGFK4pTa/IqyVjMzzV5DUKIL62WOOfjb9JaZ8ttc+RxCT9DS+Qm9UWM7l1yBlrUztEKJ3iM+CGRL1HP3i92hA63IVfOqnud7dGppIEVygfMwEtlpENvSZBT6KyPuyDXRB59x9yuwCZvlAe9RYv/5XlV2JCgewstYpJU4kyiPX3Z5BxrRwApZT9c6IjEfA2wVm1pipnzCAJe90QNoJ4fBc11EIPd8wTKHxOo2KLqVAGsZAAqAvLGTXZvXPqg=",created=1610312072,expires=1610484872,headers="(request-target) (created) (expires) host date content-type content-length"';
+      const expectedHeader = 'Signature created=1610312072,expires=1610484872,keyId="keyId",algorithm="SHA256",signature="BCekw5snRmcyEnpWLFiKKFXBXG8miig5EhvQs9Da6mLedOOzrnt+1u5OViFgFn2tqGEHgCdDNebp/+AWQFVpUSO1NpUDmYkvw0IHQNH6JBgKEn6AsyiWEV/SK48ZHElwYU8yjVH3ZBwCPYgkVAIldyDJrSHCKNY8AlayC+OwZwm05Zm/oJkobbyU/j5v27VmfyE1NJ7YnZjssuQmIN67wkKcwkGyHTh4fCQcmBQo4YbfjOHVL/vX7zabmEiWLfGbdNVCq9oN+gAP7dDeQxM5KOW4v/HTH1MP3eFYZoWRZitOlNFBHIBRa0KKqnWB43oM7IN1jSrmgIgcx64UxvSJPrjX4JKygFlaqXgKD8EBYqEU85mf1XGIWvzfP3stsDfuL5XxG8bDg41EnshBgkYYXbdgUeQ4sSoQiGvT8IX2JbZrohQdmGFK4pTa/IqyVjMzzV5DUKIL62WOOfjb9JaZ8ttc+RxCT9DS+Qm9UWM7l1yBlrUztEKJ3iM+CGRL1HP3i92hA63IVfOqnud7dGppIEVygfMwEtlpENvSZBT6KyPuyDXRB59x9yuwCZvlAe9RYv/5XlV2JCgewstYpJU4kyiPX3Z5BxrRwApZT9c6IjEfA2wVm1pipnzCAJe90QNoJ4fBc11EIPd8wTKHxOo2KLqVAGsZAAqAvLGTXZvXPqg=",headers="(request-target) (created) (expires) host date content-type content-length"';
       header.should.equal(expectedHeader);
     });
   });
@@ -837,11 +809,11 @@ describe('HttpRequest tests', () => {
     };
     it('Creates and verifies signature and digest on a HTTP request', () => {
       const digestHashAlgorithm: string = 'sha256';
-      const updatedHttpRequest: typeof HttpRequest = authorizer.digestHttpRequest(
+      const updatedHttpRequest: typeof HttpRequest = HttpKeyPairAuthorizer.digestHttpRequest(
         httpRequest,
         digestHashAlgorithm
       )
-      const doesVerify: boolean = authorizer.doesDigestVerify(
+      const doesVerify: boolean = HttpKeyPairAuthorizer.doesDigestVerify(
         updatedHttpRequest.body,
         updatedHttpRequest.headers['Digest']
       )
@@ -865,8 +837,8 @@ describe('HttpRequest tests', () => {
       body: httpBody
     };
     const authorizationParameters: Record<string,any> = {
-      created: 1610312072, // Math.floor(Date.now() / 1000) - (60 * 60 * 24),
-      expires: 1610484872, // Math.floor(Date.now() / 1000) + (60 * 60 * 24)
+      created: Math.floor(Date.now() / 1000) - (60 * 60 * 24), // 1610312072
+      expires: Math.floor(Date.now() / 1000) + (60 * 60 * 24), // 1610484872
       keyId: keyId,
       algorithm: hashAlgorithm,
       headers: [
@@ -881,25 +853,25 @@ describe('HttpRequest tests', () => {
     };
     const digestHashAlgorithm: string = 'sha256';
     it('Signs and verifies HTTP request', () => {
-      const updatedHttpRequest: typeof HttpRequest = authorizer.signHttpRequest(
+      const updatedHttpRequest: typeof HttpRequest = HttpKeyPairAuthorizer.signHttpRequest(
         httpRequest,
         privateKey,
         authorizationParameters
       )
-      const doesVerify: boolean = authorizer.doesHttpRequestVerify(
+      const doesVerify: boolean = HttpKeyPairAuthorizer.doesHttpRequestVerify(
         updatedHttpRequest,
         publicKey,
       )
       doesVerify.should.be.true
     });
     it('Signs and digests and verifies HTTP request', () => {
-      const updatedHttpRequest: typeof HttpRequest = authorizer.signHttpRequest(
+      const updatedHttpRequest: typeof HttpRequest = HttpKeyPairAuthorizer.signHttpRequest(
         httpRequest,
         privateKey,
         authorizationParameters,
         digestHashAlgorithm
       )
-      const doesVerify: boolean = authorizer.doesHttpRequestVerify(
+      const doesVerify: boolean = HttpKeyPairAuthorizer.doesHttpRequestVerify(
         updatedHttpRequest,
         publicKey
       )

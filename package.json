@@ -1,6 +1,6 @@
 {
   "name": "client-http-keypair-authorization",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Use Cavage public/private key message signing on HTTP Requests",
   "main": "src/http-keypair-auth.ts",
   "scripts": {

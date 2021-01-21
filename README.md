@@ -72,6 +72,23 @@ Therefore, it is important to know how to generate a key pair, plus how to expor
 
 **In Node:**
 ```js
+let keyPair = {}
+const { generateKeyPair } = require('crypto');
+generateKeyPair('rsa', {
+  modulusLength: 4096,
+  publicKeyEncoding: {
+    type: 'spki',
+    format: 'pem'
+  },
+  privateKeyEncoding: {
+    type: 'pkcs8',
+    format: 'pem',
+    cipher: 'aes-256-cbc',
+    passphrase: 'top secret'
+  }
+}, (err, publicKey, privateKey) => {
+  keyPair = { publicKey: publicKey, privateKey: privateKey };
+});
 ```
 
 **On the browser**
@@ -93,21 +110,33 @@ var keyPair = await crypto.subtle.generateKey(
 ### Exporting Keys
 
 **In Node:**
-```js
 
-```
-
-**On the browser**
-To export a key, use the [SubtleCrypto.exportKey()](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/exportKey) function.
+To export a key in Node, the `crypto.PublicKey.export()` and `crypto.PrivateKey.export()` methods may be used.
 
 ```js
 // export a public key, for storage and sharing with a server
-var publicKeyPem = HttpKeyPairAuthorizer.expotPublicKeyToPemString(
+const publicKeyPem = publicKey.export({
+    type: 'spki',
+    format: 'pem'
+})
+
+// export a public key, for storing locally
+const publicKeyPem = privateKey.export({
+    type: 'pkcs1',
+    format: 'pem',
+})
+```
+
+**On the browser**
+
+```js
+// export a public key, for storage and sharing with a server
+var publicKeyPem = HttpKeyPairAuthorizer.exportPublicKeyToPemString(
   keyPair.publicKey,
 )
 
 // export a public key, for storing locally
-var privateKeyPem = HttpKeyPairAuthorizer.expotPrivateKeyToPemString(
+var privateKeyPem = HttpKeyPairAuthorizer.exportPrivateKeyToPemString(
   keyPair.privateKey,
 )
 ```
@@ -117,25 +146,24 @@ var privateKeyPem = HttpKeyPairAuthorizer.expotPrivateKeyToPemString(
 **In Node:**
 
 ```js
-const privateKeyString: string = '-----BEGIN ENCRYPTED PRIVATE KEY-----\n...'
+const privateKeyString: string = '-----BEGIN PRIVATE KEY-----\n...'
 const passphrase: string = 'I6lL3W7o3HAnpXldcdWm';  // Create a secret passphrase
 const cipher: string = 'aes-256-cbc'; // pick a hash from cipher.getHashes()
 const privateKey: typeof crypto.PrivateKeyObject = crypto.createPrivateKey({
   key: privateKeyString,
-  passphrase: passphrase,
-  cipher: cipher
+  encoding: 'utf-8'
 });
 
 const publicKeyString = '-----BEGIN PUBLIC KEY-----\n...';
 const publicKey: typeof crypto.PublicKeyObject = crypto.createPublicKey({
   key: publicKeyString,
-  type: 'pkcs1',
-  format: 'pem',
-  encoding: 'base64'
+  encoding: 'utf-8'
 });
 ```
 
 **On the browser**
+
+On the browser, `algorithmParameters` must be provided, which are compatible with the [importKey supported formats](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey#supported_formats)
 
 ```js
 // Get a PEM private key, for example this ECDSA P-256 key
@@ -194,7 +222,6 @@ The default signature will include only the HTTP `Date` header by default. As th
 import { HttpKeyPairAuthorizer, HttpMethod } from 'client-http-keypair-authorization-headers'
 
 // Load a locally-stored private key
-const authorizer = new HttpKeyPairAuthorizer()
 const privateKeyString = '-----BEGIN ENCRYPTED PRIVATE KEY-----...'
 const passphrase = 'passphrase'
 const privateKey = crypto.createPrivateKey({
@@ -220,7 +247,7 @@ const authorizationParameters = {
   algorithm: 'SHA256',
   headers: []
 }
-const updatedHttpRequest = authorizer.createAuthorizationHeader(
+const updatedHttpRequest = HttpKeyPairAuthorizer.createAuthorizationHeader(
   httpRequest,
   privateKey,
   authorizationParameters,
@@ -285,7 +312,6 @@ This example shows the full headers including a `Digest` (explained below)
 import { HttpKeyPairAuthorizer, HttpMethod } from 'client-http-keypair-authorization-headers'
 
 // load the private key from memory
-const authorizer = new HttpKeyPairAuthorizer()
 const privateKeyString = '-----BEGIN ENCRYPTED PRIVATE KEY-----...'
 const passphrase = 'passphrase'
 const privateKey = crypto.createPrivateKey({
@@ -329,7 +355,7 @@ const authorizationParameters = {
 const digestHashAlgorithm = 'SHA256'
 
 // Apply signature headers to HTTP request
-const updatedHttpRequest = authorizer.createAuthorizationHeader(
+const updatedHttpRequest = HttpKeyPairAuthorizer.createAuthorizationHeader(
   httpRequest,
   privateKey,
   authorizationParameters,
@@ -413,10 +439,9 @@ The digest will be included in the `Digest` HTTP header and can be bound to the 
 // if not using in the browser:
 import HttpKeyPairAuthorizer from 'client-http-keypair-authorization-headers'
 
-const authorizer = new HttpKeyPairAuthorizer()
 const httpBody = '{"hello": "world"}'
 const hashAlgorithm = 'SHA256'
-const digest = authorizer.createDigestHeader(httpBody, hashAlgorithm)
+const digest = HttpKeyPairAuthorizer.createDigestHeader(httpBody, hashAlgorithm)
 
 console.log(digest)
 // SHA256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=
@@ -485,6 +510,8 @@ A signature which incorporates a digest makes it possible to verify the authenti
 
 ## Verify the Signature
 
+*This feature is currently not available in the browser.*
+
 A client is expected to send the same data in an `Authorization` and `Signature` HTTP header, which will includes:
 
 * The public key ID as known on the server
@@ -536,7 +563,7 @@ HttpRequest = {
 }
 
 // verify the Authorization header
-const doesVerify: string = authorizer.doesHttpRequestVerify(
+const doesVerify: string = HttpKeyPairAuthorizer.doesHttpRequestVerify(
   authorizationHeader,
   httpRequest,
   publicKey
@@ -549,6 +576,8 @@ The server is responsible for managing the lookup function for the `keyId` and l
 
 ### Verify Digest
 
+*This feature is currently not available in the browser.*
+
 A request may contain a `Digest` header, which verifies the request body was not altered during transit. It is not cryptographically signed, so a middle man may be able to create a new digest.
 
 However, when the `Authorization` header is signed using the  `Digest` header, the request recipient can know that the digest (and therefore the request body) has not been tampered with.
@@ -557,11 +586,10 @@ However, when the `Authorization` header is signed using the  `Digest` header, t
 // if not using in the browser:
 import HttpKeyPairAuthorizer from 'client-http-keypair-authorization-headers'
 
-const authorizer = new HttpKeyPairAuthorizer()
 
 const staticDigestHeader = 'SHA256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE='
 const httpBody = '{"hello": "world"}'
-const doesDigestVerify = authorizer.doesDigestVerify(alteredHttpBody, staticDigestHeader)
+const doesDigestVerify = HttpKeyPairAuthorizer.doesDigestVerify(alteredHttpBody, staticDigestHeader)
 console.log(doesDigestVerify)
 // true
 ```
