@@ -1,8 +1,6 @@
-const crypto = require('crypto')
-const { Hash } = require('crypto')
-const { Sign } = require('crypto')
-// const { PrivateKeyObject, PublicKeyObject } = require('crypto')
-// const { subtle } = require('crypto').webcrypto;
+const crypto = require('crypto');
+const { Hash } = require('crypto');
+const { Sign } = require('crypto');
 
 
 exports.printMsg = function () {
@@ -63,7 +61,7 @@ export default class HttpKeyPairAuthorizer {
      * @param {string[]} An ordered list of headers to use to bulid the signing message
      * @return {string} the signing message
      */
-    const httpHeaders = httpRequest.headers;
+    const httpHeaders: Record<string, any> = httpRequest.headers;
     const signingRows: string[] = [];
     if (authorizationParameters.headers && authorizationParameters.headers.length > 0) {
       const requiredAuthorizationHeaders: string[] = authorizationParameters.headers;
@@ -71,7 +69,7 @@ export default class HttpKeyPairAuthorizer {
         const header: string = requiredAuthorizationHeaders[i];
         if (header[0] === '(') {
           if (header === '(request-target)') {
-            const requestTarget = HttpKeyPairAuthorizer.__getRequestTarget(httpRequest);
+            const requestTarget: string = HttpKeyPairAuthorizer.__getRequestTarget(httpRequest);
             signingRows.push(`${header}: ${requestTarget}`)
           } else {
             const cleanedHeader: string = header.substring(1, header.length - 1)
@@ -253,7 +251,7 @@ export default class HttpKeyPairAuthorizer {
          return false;
        } else {
          const created: number = parseInt(authorizationParameters.created)
-         if (created == NaN || created > currentTimestamp) {
+         if (isNaN(created) || created > currentTimestamp) {
            return false;
          }
        }
@@ -264,13 +262,13 @@ export default class HttpKeyPairAuthorizer {
          return false;
        } else {
          const expires: number = parseInt(authorizationParameters.expires)
-         if (expires == NaN || expires < currentTimestamp) {
+         if (isNaN(expires) || expires < currentTimestamp) {
            return false;
          }
        }
      }
-     const signingMessage = HttpKeyPairAuthorizer.createSigningMessage(httpRequest, authorizationParameters);
-     const doesVerify = crypto.verify(
+     const signingMessage: string = HttpKeyPairAuthorizer.createSigningMessage(httpRequest, authorizationParameters);
+     const doesVerify: boolean = crypto.verify(
        authorizationParameters.algorithm,
        Buffer.from(signingMessage),
        {
@@ -290,9 +288,9 @@ export default class HttpKeyPairAuthorizer {
      * @param {crypto.PublicKeyObject} A public key to verify the signature
      * @return {boolean} `true` if HttpRequest verifies, `false` otherwise
      */
-    const authorizationHeader = httpRequest.headers['Authorization'];
-    const signatureHeader = httpRequest.headers['Signature'];
-    const digestHeader = httpRequest.headers['Digest'];
+    const authorizationHeader: string = httpRequest.headers['Authorization'];
+    const signatureHeader: string = httpRequest.headers['Signature'];
+    const digestHeader: string = httpRequest.headers['Digest'];
     // There may be either an Authorization or a Signature
     if (!authorizationHeader && !signatureHeader) {
       return false;
@@ -317,7 +315,7 @@ export default class HttpKeyPairAuthorizer {
         return false;
       }
     }
-    return HttpKeyPairAuthorizer.doesSignatureHeaderVerify(authorizationHeader, httpRequest, publicKey);
+    return HttpKeyPairAuthorizer.doesSignatureHeaderVerify(header, httpRequest, publicKey);
   }
 
   static getAuthorizationParametersFromSignatureHeader(signatureHeader: string): Record<string,any> {
@@ -333,8 +331,8 @@ export default class HttpKeyPairAuthorizer {
     const signatureData: string[] = signatureDataString.split(',');
 
     signatureData.forEach((item: string, index: number) => {
-      const splitPoint = item.indexOf('=');
-      const key: string = item.substring(0, splitPoint).trim();
+      const splitPoint: number = item.indexOf('=');
+      const key = item.substring(0, splitPoint).trim();
       let value: any = item.substring(splitPoint + 1).trim();
       if (value[0] === '"') {
         value = value.substring(1, value.length - 1);
@@ -388,7 +386,7 @@ export default class HttpKeyPairAuthorizer {
      } else {
        type = 'spki'
      }
-     const privateKeyPem = privateKey.export({
+     const privateKeyPem: typeof crypto.PrivateKeyObject = privateKey.export({
          type: type,
          format: 'pem'
      })
@@ -403,7 +401,7 @@ export default class HttpKeyPairAuthorizer {
      * @param {crypto.PublicKey} a public key
      * @return {string}
      */
-     const publicKeyPem = publicKey.export({
+     const publicKeyPem: typeof crypto.PublicKeyObject = publicKey.export({
          type: 'spki',
          format: 'pem'
      })

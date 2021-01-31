@@ -1,4 +1,5 @@
 
+
 # HTTP Cavage public key / private key authorization headers for authorizations
 
 
@@ -133,7 +134,7 @@ generateKeyPair('rsa', {
 });
 ```
 
-**On the browser**
+**In the browser**
 
 Of course there are many algorithms that can be used to generate a key pair. This example creates an ECDSA-P256 key pair which can be extracted (necessary for saving and sharing) and can be used to both sign and verify signatures (necessary for authorization).
 ```js
@@ -169,7 +170,7 @@ const publicKeyPem = privateKey.export({
 })
 ```
 
-**On the browser**
+**In the browser**
 
 ```js
 // export a public key, for storage and sharing with a server
@@ -203,7 +204,7 @@ const publicKey: typeof crypto.PublicKeyObject = crypto.createPublicKey({
 });
 ```
 
-**On the browser**
+**In the browser**
 
 On the browser, `algorithmParameters` must be provided, which are compatible with the [importKey supported formats](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey#supported_formats)
 
@@ -298,11 +299,15 @@ console.log(updatedHttpRequest.headers['Authorization']);
 // 'algorithm="SHA256",keyId="Test",signature="iKKFBCekw5snRmcyEnpWLFXBXG8miig...",headers="date"'
 ```
 
-**On the browser:**
+**In the browser:**
 
 ```js
 // Load a private key
 const privateKeyString = '-----BEGIN PRIVATE KEY-----...'
+var algorithmParameters = {
+  name: 'RSASSA-PKCS1-v1_5',
+  hash: 'SHA-256'
+}
 var privateKey = HttpKeyPairAuthorizer.importPrivateKeyFromPemString(privateKeyString, algorithmParameters)
 
 // Build a HTTP request
@@ -310,7 +315,7 @@ var now = new Date()
 var httpBody = '{"hello": "world"}'
 var httpRequest = {
   method: 'POST',
-  path: '/foo?param=value&pet=dog'
+  path: '/foo?param=value&pet=dog',
   headers: {
     Date: now.toUTCString(),
   },
@@ -407,7 +412,7 @@ console.log(updatedHttpRequest.headers['Authorization']);
 // 'algorithm="SHA256",keyId="keyId",signature="iKKFBCekw5snRmcyEnpWLFXBXG8miig...",created=1234567890,expires=1234567890,headers="(request-target) (created) (expires) host date digest content-type content-length"'
 ```
 
-**On the browser:**
+**In the browser:**
 
 ```js
 // if not using in the browser:
@@ -421,7 +426,7 @@ var now = new Date()
 var httpBody = '{"hello": "world"}'
 var httpRequest = {
   method: 'POST',
-  path: '/foo?param=value&pet=dog'
+  path: '/foo?param=value&pet=dog',
   headers: {
     Host: 'example.com',
     Date: now.toUTCString(),
@@ -482,17 +487,17 @@ The digest will be included in the `Digest` HTTP header and can be bound to the 
 import HttpKeyPairAuthorizer from 'client-http-keypair-authorization-headers'
 
 const httpBody = '{"hello": "world"}'
-const hashAlgorithm = 'SHA256'
+const hashAlgorithm = 'SHA-256'
 const digest = HttpKeyPairAuthorizer.createDigestHeader(httpBody, hashAlgorithm)
 
 console.log(digest)
 // SHA256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=
 ```
 
-** In the Browser:**
+**In the Browser:**
 
 ```js
-var digestHashAlgorithm = 'SHA256'
+var digestHashAlgorithm = 'SHA-256'
 HttpKeyPairAuthorizer.createDigestHeader(httpRequest.body, digestHashAlgorithm)
 HttpKeyPairAuthorizer.createDigestHeader(httpRequest.body, digestHashAlgorithm).then(response => {
   httpRequest.headers['Digest'] = response
@@ -552,8 +557,6 @@ A signature which incorporates a digest makes it possible to verify the authenti
 
 ## Verify the Signature
 
-*This feature is currently not available in the browser.*
-
 A client is expected to send the same data in an `Authorization` and `Signature` HTTP header, which will includes:
 
 * The public key ID as known on the server
@@ -563,6 +566,8 @@ A client is expected to send the same data in an `Authorization` and `Signature`
 * Possibly the creation and expiration time of the signature
 
 This can all be parsed by the HttpKeyPairAuthorizer class to verify the `Authorization` header.
+
+**In Node:**
 
 ```js
 // if not using in the browser:
@@ -614,6 +619,55 @@ console.log(doesVerify)
 // true
 ```
 
+**In the browser:**
+
+```js
+// authorizationHeader pulled from a HTTP request
+// public key loaded from a locally referenced public key ID, which
+// was extracted from the authorizationHeader key="<public key id>"
+
+// look up publicKeyString from keyId, provided in authorization header
+const publicKeyString = '-----BEGIN PUBLIC KEY-----...'
+// create a CryptoKey object
+const algorithmParameters = {
+  name: 'RSASSA-PKCS1-v1_5',
+  hash: 'SHA-256'
+}
+const publicKey = await HttpKeyPairAuthorizer.importPublicKeyFromPemString(
+  publicKeyString,
+  algorithmParameters
+)
+
+// build a HttpRequest interface
+// this example uses hard-coded data
+// the actual header data required will be specified in the `headers=""`
+// string within the `authorizationHeader`
+httpRequest = {
+  method: 'get',
+  path: '/local/path?query=parameters',
+  headers: {
+    'Host': 'example.com',
+    'Date': 'Mon, 11 Jan 2021 20:54:32 GMT',
+    'Content-Type': 'application/json; encoding=utf-8',
+    'Accept': 'application/json',
+    'Content-Length': '{"hello": "world"}'.length * 2,
+    'Digest': 'abc123',
+    'Authorization': authorizationHeader,
+    'Signature': authorizationHeader
+  },
+  body: '{"hello": "world"}'
+}
+
+// verify the Authorization header
+const doesVerify = await HttpKeyPairAuthorizer.doesHttpRequestVerify(
+  authorizationHeader,
+  httpRequest,
+  publicKey
+)
+console.log(doesVerify)
+// true
+```
+
 The server is responsible for managing the lookup function for the `keyId` and loading a locally stored public key belonging to the client that sent the request.
 
 ### Verify Digest
@@ -624,14 +678,25 @@ A request may contain a `Digest` header, which verifies the request body was not
 
 However, when the `Authorization` header is signed using the  `Digest` header, the request recipient can know that the digest (and therefore the request body) has not been tampered with.
 
+**In Node**
+
 ```js
 // if not using in the browser:
 import HttpKeyPairAuthorizer from 'client-http-keypair-authorization-headers'
 
-
 const staticDigestHeader = 'SHA256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE='
 const httpBody = '{"hello": "world"}'
-const doesDigestVerify = HttpKeyPairAuthorizer.doesDigestVerify(alteredHttpBody, staticDigestHeader)
+const doesDigestVerify = HttpKeyPairAuthorizer.doesDigestVerify(httpBody, staticDigestHeader)
+console.log(doesDigestVerify)
+// true
+```
+
+**In the browser:**
+
+```js
+const staticDigestHeader = 'SHA256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE='
+const httpBody = '{"hello": "world"}'
+const doesDigestVerify = await HttpKeyPairAuthorizer.doesDigestVerify(httpBody, staticDigestHeader)
 console.log(doesDigestVerify)
 // true
 ```

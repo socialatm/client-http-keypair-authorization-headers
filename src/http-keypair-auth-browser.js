@@ -41,8 +41,8 @@ class HttpKeyPairAuthorizer {
      * @return {string} A hash digest of the text variable
      */
     return new Promise((resolve) => {
-      this.createDigest(text, hashAlgorithm).then(digest => {
-        var header = `${hashAlgorithm.toUpperCase()}=${digest}`
+      HttpKeyPairAuthorizer.createDigest(text, hashAlgorithm).then(digest => {
+        var header = `${hashAlgorithm.toUpperCase().replace('-', '')}=${digest}`
         resolve(header)
       })
     })
@@ -66,7 +66,7 @@ class HttpKeyPairAuthorizer {
         var header = requiredAuthorizationHeaders[i]
         if (header[0] === '(') {
           if (header === '(request-target)') {
-            var requestTarget = this.__getRequestTarget(httpRequest)
+            var requestTarget = HttpKeyPairAuthorizer.getRequestTarget(httpRequest)
             signingRows.push(`${header}: ${requestTarget}`)
           } else {
             var cleanedHeader = header.substring(1, header.length - 1)
@@ -107,11 +107,20 @@ class HttpKeyPairAuthorizer {
       hash: { name: authorizationParameters.algorithm }
     }
     /* */
-    var algorithmParameters = authorizationParameters.algorithmParameters
-    var signingMessage = this.createSigningMessage(httpRequest, authorizationParameters)
+    var lowerCaseAlgorithm = authorizationParameters.algorithm.toLowerCase()
+    var signingAlgorithmParameters = null
+    if (lowerCaseAlgorithm.indexOf('sha') === 0) {
+      signingAlgorithmParameters = 'RSASSA-PKCS1-v1_5'
+    } else if (lowerCaseAlgorithm.indexOf('hmac') === 0) {
+      signingAlgorithmParameters = 'HMAC'
+    } else if (lowerCaseAlgorithm.indexOf('ecdsa') === 0) {
+      signingAlgorithmParameters = { name: 'ECDSA' }
+      signingAlgorithmParameters.hash = lowerCaseAlgorithm.algorithm.substring('ECDSA'.length).toUpperCase()
+    }
+    var signingMessage = HttpKeyPairAuthorizer.createSigningMessage(httpRequest, authorizationParameters)
     var encoder = new TextEncoder()
     return new Promise(resolve => {
-      window.crypto.subtle.sign(algorithmParameters, privateKey, encoder.encode(signingMessage)).then(response => {
+      window.crypto.subtle.sign(signingAlgorithmParameters, privateKey, encoder.encode(signingMessage)).then(response => {
         var signature = window.btoa(String.fromCharCode.apply(null, new Uint8Array(response)))
         resolve(signature)
       })
@@ -129,10 +138,8 @@ class HttpKeyPairAuthorizer {
      * @return {string} The full Authorization HTTP header including algorithm="", keyId="", signature="", and headers="".
      */
     return new Promise(resolve => {
-      this.createMessageSignature(httpRequest, privateKey, authorizationParameters).then(response => {
+      HttpKeyPairAuthorizer.createMessageSignature(httpRequest, privateKey, authorizationParameters).then(response => {
         var signature = response
-        console.log('signature')
-        console.log(signature)
         var signatureHeaders = {}
         var authorizationHeaderString = ''
         if (authorizationParameters) {
@@ -147,14 +154,13 @@ class HttpKeyPairAuthorizer {
             }).join(' ')
           }
         }
-        console.log(authorizationParameters)
-        if (authorizationParameters.algorithmParameters.hash === 'SHA-1') {
+        if (authorizationParameters.algorithm === 'SHA1') {
           signatureHeaders.algorithm = 'RSA-SHA1'
-        } else if (authorizationParameters.algorithmParameters.hash === 'SHA-256') {
+        } else if (authorizationParameters.algorithm === 'SHA256') {
           signatureHeaders.algorithm = 'RSA-SHA256'
-        } else if (authorizationParameters.algorithmParameters.hash === 'SHA-384') {
+        } else if (authorizationParameters.algorithm === 'SHA384') {
           signatureHeaders.algorithm = 'RSA-SHA384'
-        } else if (authorizationParameters.algorithmParameters.hash === 'SHA-512') {
+        } else if (authorizationParameters.algorithm === 'SHA512') {
           signatureHeaders.algorithm = 'RSA-SHA512'
         }
         signatureHeaders.signature = signature
@@ -174,7 +180,6 @@ class HttpKeyPairAuthorizer {
         }).join(',')
         /* */
         var header = `Signature ${signatureHeader}`
-        console.log(header)
         resolve(header)
       })
     })
@@ -189,7 +194,7 @@ class HttpKeyPairAuthorizer {
      * @return {HttpRequest} An updated dictionary with a `Digest` header
      */
     return new Promise(resolve => {
-      httpRequest.headers.Digest = this.createDigestHeader(httpRequest.body, hashAlgorithm)
+      httpRequest.headers.Digest = HttpKeyPairAuthorizer.createDigestHeader(httpRequest.body, hashAlgorithm)
       resolve(httpRequest)
     })
   }
@@ -208,16 +213,15 @@ class HttpKeyPairAuthorizer {
      */
     if (digestHashAlgorithm) {
       return new Promise(resolve => {
-        console.log(authorizationParameters)
-        this.createDigestHeader(httpRequest.body, digestHashAlgorithm).then(digestHeader => {
+        HttpKeyPairAuthorizer.createDigestHeader(httpRequest.body, digestHashAlgorithm).then(digestHeader => {
           httpRequest.headers.Digest = digestHeader
-          this.signHttpRequestAfterDigest(httpRequest, privateKey, authorizationParameters).then(httpResponse => {
+          HttpKeyPairAuthorizer.signHttpRequestAfterDigest(httpRequest, privateKey, authorizationParameters).then(httpResponse => {
             resolve(httpRequest)
           })
         })
       })
     } else {
-      return this.signHttpRequestAfterDigest(httpRequest, privateKey, authorizationParameters)
+      return HttpKeyPairAuthorizer.signHttpRequestAfterDigest(httpRequest, privateKey, authorizationParameters)
     }
   }
 
@@ -233,7 +237,7 @@ class HttpKeyPairAuthorizer {
      * @return {HttpRequest} The updated dictionary with `Authorization` and `Signature` headers, and possibly a `Digest` header
      */
     return new Promise(resolve => {
-      this.createAuthorizationHeader(httpRequest, privateKey, authorizationParameters).then(authorizationHeader => {
+      HttpKeyPairAuthorizer.createAuthorizationHeader(httpRequest, privateKey, authorizationParameters).then(authorizationHeader => {
         httpRequest.headers.Authorization = authorizationHeader
         httpRequest.headers.Signature = authorizationHeader
         resolve(httpRequest)
@@ -241,7 +245,7 @@ class HttpKeyPairAuthorizer {
     })
   }
 
-  static __getRequestTarget (httpRequest) {
+  static getRequestTarget (httpRequest) {
     /**
      * Build an authorization-compatible (request-target) string, such as 'post /path/to/endpoint?query=param'
      *
@@ -252,7 +256,7 @@ class HttpKeyPairAuthorizer {
     return `${httpRequest.method.toLowerCase()} ${httpRequest.path}`
   }
 
-  static __arrayBufferToString (buf) {
+  static arrayBufferToString (buf) {
     /**
      * Convert an array buffer to a string.
      *
@@ -263,7 +267,7 @@ class HttpKeyPairAuthorizer {
     return String.fromCharCode.apply(null, new Uint8Array(buf))
   }
 
-  static __stringToArrayBuffer (str) {
+  static stringToArrayBuffer (str) {
     /**
      * Convert a string to an array buffer.
      *
@@ -273,13 +277,13 @@ class HttpKeyPairAuthorizer {
      */
     var buf = new ArrayBuffer(str.length)
     var bufView = new Uint8Array(buf)
-    for (let i = 0, strLen = str.length; i < strLen; i++) {
+    for (var i = 0, strLen = str.length; i < strLen; i++) {
       bufView[i] = str.charCodeAt(i)
     }
     return buf
   }
 
-  static __addNewlines (str, lineLength) {
+  static addNewLines (str, lineLength) {
     /**
      * Add newlines every `lineLength` characters
      *
@@ -288,12 +292,190 @@ class HttpKeyPairAuthorizer {
      * @param {number} The number of characters between line breaks
      * @return {string}
      */
-    let result = ''
+    var result = ''
     while (str.length > 0) {
       result += str.substring(0, lineLength) + '\n'
       str = str.substring(lineLength)
     }
     return result
+  }
+
+  static doesDigestVerify (text, digest) {
+    /**
+     * Verify the digest header.
+     *
+     * @public
+     * @param {string} The http message body
+     * @param {string} The digest header, which includes the hash in the digest string.
+     * @param {Promise} that resolves to `true` if digest verifies, `false` otherwise
+     */
+    var splitPoint = digest.indexOf('=')
+    var hashAlgorithm = digest.substring(0, splitPoint).toLowerCase()
+    var algorithm = ''
+    if (hashAlgorithm === 'sha1') {
+      algorithm = 'SHA-1'
+    } else if (hashAlgorithm === 'sha256') {
+      algorithm = 'SHA-256'
+    } else if (hashAlgorithm === 'sha384') {
+      algorithm = 'SHA-384'
+    } else if (hashAlgorithm === 'sha512') {
+      algorithm = 'SHA-512'
+    }
+    return new Promise(resolve => {
+      HttpKeyPairAuthorizer.createDigestHeader(text, algorithm).then(expectedDigestHeader => {
+        var doesVerify = (digest === expectedDigestHeader)
+        resolve(doesVerify)
+      })
+    })
+  }
+
+  static doesSignatureHeaderVerify (header, httpRequest, publicKey) {
+    /**
+     * Verifies a HTTP keypair authorization signature against a locally stored public key
+     *
+     * @public
+     * @param {string} The signature to verify
+     * @param {HttpRequest} The HTTP request information including a body, headers, and more.
+     * @param {CryptoKey} A public key to verify the signature
+     * @return {Promise} that resolves to `true` if signature verifies, `false` otherwise
+     */
+    // var requestTarget = HttpKeyPairAuthorizer.getRequestTarget(httpRequest)
+    var authorizationParameters = HttpKeyPairAuthorizer.getAuthorizationParametersFromSignatureHeader(header)
+    var requiredAuthorizationHeaders = authorizationParameters.headers
+    var currentTimestamp = Math.floor(Date.now() / 1000)
+    // if an authorizationParameters.created exists, make sure it's not in the future
+    if (requiredAuthorizationHeaders.includes('(created)')) {
+      if (!authorizationParameters.created) {
+        return false
+      } else {
+        var created = parseInt(authorizationParameters.created)
+        if (isNaN(created) || created > currentTimestamp) {
+          return false
+        }
+      }
+    }
+    // if an authorizationParameters.expires exists, make sure it's not in the past
+    if (requiredAuthorizationHeaders.includes('(expires)')) {
+      if (!authorizationParameters.expires) {
+        return false
+      } else {
+        var expires = parseInt(authorizationParameters.expires)
+        if (isNaN(expires) || expires < currentTimestamp) {
+          return false
+        }
+      }
+    }
+    var subtleAuthorizationParameters = null
+    if (authorizationParameters.algorithm.indexOf('RSA') === 0) {
+      subtleAuthorizationParameters = 'RSASSA-PKCS1-v1_5'
+    } else if (authorizationParameters.algorithm.indexOf('ECDSA') === 0) {
+      subtleAuthorizationParameters = { name: 'ECDSA' }
+      var algoAndHash = authorizationParameters.algorithm.split('-')
+      var hash = algoAndHash[1]
+      subtleAuthorizationParameters.hash = { name: hash }
+    } else if (authorizationParameters.algorithm.indexOf('HMAC') === 0) {
+      subtleAuthorizationParameters = 'HMAC'
+    }
+    var signingMessage = HttpKeyPairAuthorizer.createSigningMessage(httpRequest, authorizationParameters)
+    var encoder = new TextEncoder()
+
+    var signatureBytes = HttpKeyPairAuthorizer.stringToArrayBuffer(window.atob(authorizationParameters.signature))
+    return new Promise(resolve => {
+      window.crypto.subtle.verify(
+        subtleAuthorizationParameters,
+        publicKey,
+        signatureBytes,
+        encoder.encode(signingMessage)
+      ).then(doesVerify => {
+        resolve(doesVerify)
+      })
+    })
+  }
+
+  static doesHttpRequestVerify (httpRequest, publicKey) {
+    /**
+     * Verify an entire HttpRequest.  There should be identical `Authorization` and `Signature` headers
+     *
+     * @public
+     * @param {HttpRequest} The HTTP request information including a body, headers, and more.
+     * @param {CryptoKey} A public key to verify the signature
+     * @return {Promise} that resolves to `true` if HttpRequest verifies, `false` otherwise
+     */
+    var authorizationHeader = httpRequest.headers.Authorization
+    var signatureHeader = httpRequest.headers.Signature
+    var digestHeader = httpRequest.headers.Digest
+    return new Promise(resolve => {
+      var header = ''
+      // There may be either an Authorization or a Signature
+      if (!authorizationHeader && !signatureHeader) {
+        resolve(false)
+      }
+      // if there are both an Authorization and Signature, they should match
+      if (authorizationHeader && signatureHeader) {
+        if (authorizationHeader !== signatureHeader) {
+          resolve(false)
+        }
+        header = authorizationHeader
+      } else {
+        if (authorizationHeader) {
+          header = authorizationHeader
+        } else if (signatureHeader) {
+          header = signatureHeader
+        }
+      }
+      if (digestHeader) {
+        HttpKeyPairAuthorizer.doesDigestVerify(httpRequest.body, digestHeader).then(doesDigestVerify => {
+          if (!doesDigestVerify) {
+            resolve(false)
+          }
+          HttpKeyPairAuthorizer.doesSignatureHeaderVerify(header, httpRequest, publicKey).then(doesVerify => {
+            resolve(doesVerify)
+          })
+        })
+      }
+    })
+  }
+
+  static getAuthorizationParametersFromSignatureHeader (signatureHeader) {
+    /**
+     * Convert a raw signature header to its component data
+     *
+     * @public method
+     * @param {string} The HTTP signature header
+     * @return {Record<string,any>} A dictionary of key/value pairs
+     */
+    var authorizationParameters = {}
+    var signatureDataString = signatureHeader.substring(signatureHeader.indexOf(' ') + 1)
+    var signatureData = signatureDataString.split(',')
+
+    signatureData.forEach((item, index) => {
+      var splitPoint = item.indexOf('=')
+      var key = item.substring(0, splitPoint).trim()
+      var value = item.substring(splitPoint + 1).trim()
+      if (value[0] === '"') {
+        value = value.substring(1, value.length - 1)
+      } else {
+        var lowercaseValue = value.toLowerCase()
+        if (lowercaseValue === 'true') {
+          value = true
+        } else if (lowercaseValue === 'false') {
+          value = false
+        } else {
+          var numericValue = parseFloat(value)
+          if (isNaN(numericValue)) {
+            value = numericValue
+          }
+        }
+      }
+      authorizationParameters[key] = value
+    })
+    // if no headers are specified, the default is to find a HTTP Date header
+    if (!authorizationParameters.headers) {
+      authorizationParameters.headers = 'Date'
+    }
+    var requiredAuthorizationHeaders = authorizationParameters.headers.split(' ')
+    authorizationParameters.headers = requiredAuthorizationHeaders
+    return authorizationParameters
   }
 
   static exportPrivateKeyToPemString (privateKey) {
@@ -304,7 +486,7 @@ class HttpKeyPairAuthorizer {
      * @param {CryptoKey} a private key
      * @return {string}
      */
-    return this.__exportKeyToPemString(HttpKeyPairAuthorizer.KEY_TYPE_PRIVATE, privateKey)
+    return HttpKeyPairAuthorizer.exportKeyToPemString(HttpKeyPairAuthorizer.KEY_TYPE_PRIVATE, privateKey)
   }
 
   static exportPublicKeyToPemString (publicKey) {
@@ -315,10 +497,10 @@ class HttpKeyPairAuthorizer {
      * @param {CryptoKey} a public key
      * @return {string}
      */
-    return this.__exportKeyToPemString(HttpKeyPairAuthorizer.KEY_TYPE_PUBLIC, publicKey)
+    return HttpKeyPairAuthorizer.exportKeyToPemString(HttpKeyPairAuthorizer.KEY_TYPE_PUBLIC, publicKey)
   }
 
-  static __exportKeyToPemString (keyType, privateKey) {
+  static exportKeyToPemString (keyType, privateKey) {
     /**
      * Export a key to a PEM string
      *
@@ -341,9 +523,9 @@ class HttpKeyPairAuthorizer {
     return new Promise(resolve => {
       window.crypto.subtle.exportKey(keyFormat, privateKey).then(response => {
         var pkcs8PrivateKey = response
-        var exportedAsString = this.__arrayBufferToString(pkcs8PrivateKey)
+        var exportedAsString = HttpKeyPairAuthorizer.arrayBufferToString(pkcs8PrivateKey)
         var exportedAsBase64 = window.btoa(exportedAsString)
-        var newlineExport = this.__addNewLines(exportedAsBase64)
+        var newlineExport = HttpKeyPairAuthorizer.addNewLines(exportedAsBase64, 64)
         var pemExported = `-----BEGIN ${paddingText} KEY-----\n${newlineExport}-----END ${paddingText} KEY-----`
         resolve(pemExported)
       })
@@ -359,7 +541,7 @@ class HttpKeyPairAuthorizer {
      * @param {any} The name of the algorithm or a dictionary of algorithm parameters such as {name: hash: }. See [SubtleCrypto.importKey() Supported Formats](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey#supported_formats) for more information
      * @return {Promise} that's resolved with a {CryptoKey}
      */
-    return this.__importKeyFromPemString(HttpKeyPairAuthorizer.KEY_TYPE_PRIVATE, pemString, algorithmParameters)
+    return HttpKeyPairAuthorizer.importKeyFromPemString(HttpKeyPairAuthorizer.KEY_TYPE_PRIVATE, pemString, algorithmParameters)
   }
 
   static importPublicKeyFromPemString (pemString, algorithmParameters) {
@@ -371,10 +553,10 @@ class HttpKeyPairAuthorizer {
      * @param {any} The name of the algorithm or a dictionary of algorithm parameters such as {name: hash: }. See [SubtleCrypto.importKey() Supported Formats](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey#supported_formats) for more information
      * @return {Promise} that's resolved with a {CryptoKey}
      */
-    return this.__importKeyFromPemString(HttpKeyPairAuthorizer.KEY_TYPE_PUBLIC, pemString, algorithmParameters)
+    return HttpKeyPairAuthorizer.importKeyFromPemString(HttpKeyPairAuthorizer.KEY_TYPE_PUBLIC, pemString, algorithmParameters)
   }
 
-  static __importKeyFromPemString (keyType, pemString, algorithmParameters) {
+  static importKeyFromPemString (keyType, pemString, algorithmParameters) {
     /**
      * Import a CryptoKey private key  PEM string.
      *
@@ -397,12 +579,12 @@ class HttpKeyPairAuthorizer {
     }
     var base64Key = pemString.replace(/-{5}(BEGIN|END)([A-Z ]*)KEY-{5}?/g, '')
     var binaryKey = window.atob(base64Key)
-    var encodedBinaryKey = this.__stringToArrayBuffer(binaryKey)
+    var encodedBinaryKey = HttpKeyPairAuthorizer.stringToArrayBuffer(binaryKey)
     return new Promise((resolve, reject) => {
       window.crypto.subtle.importKey(keyFormat, encodedBinaryKey, algorithmParameters, true, keyUses).then(privateKey => {
         resolve(privateKey)
       }).catch(() => {
-        throw Error('Error processing your PEM string into a CryptoKey. Your PEM format is likely incompatible. Make sure it PKCS #8 compatible')
+        throw Error('Error processing your PEM string into a CryptoKey. Your PEM format is likely incompatible. Make sure it PKCS #8 or SPKI compatible')
       })
     })
   }
@@ -472,11 +654,13 @@ var authorizationParameters = {
     'digest'
   ]
 }
-var digestHashAlgorithm = 'SHA256'
+var digestHashAlgorithm = 'SHA-256'
 
 // A digest will be inserted automatically if 'digest' is in the `.headers` array
 // however, if you want to insert a digest manually, you can do this:
-httpRequest.headers['Digest'] = HttpKeyPairAuthorizer.createDigestHeader(httpRequest.body, digestHashAlgorithm)
+HttpKeyPairAuthorizer.createDigestHeader(httpRequest.body, digestHashAlgorithm).then(response => {
+  httpRequest.headers['Digest'] = response
+})
 
 // Update the HTTP request with the header signature
 var updatedHttpRequest;

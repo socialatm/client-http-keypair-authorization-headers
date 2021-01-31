@@ -30,5 +30,9 @@ export default class HttpKeyPairAuthorizer {
     static doesHttpRequestVerify(httpRequest: HttpRequest, publicKey: typeof crypto.PublicKeyObject): boolean;
     static getAuthorizationParametersFromSignatureHeader(signatureHeader: string): Record<string, any>;
     static __getRequestTarget(httpRequest: HttpRequest): string;
+    static exportPrivateKeyToPemString(privateKey: typeof crypto.PrivateKeyObject): string;
+    static exportPublicKeyToPemString(publicKey: typeof crypto.PublicKeyObject): string;
+    static importPrivateKeyFromPemString(pemString: string, algorithmParameters: any): typeof crypto.PrivateKeyObject;
+    static importPublicKeyFromPemString(pemString: string, algorithmParameters: any): typeof crypto.PublicKeyObject;
 }
 export {};
