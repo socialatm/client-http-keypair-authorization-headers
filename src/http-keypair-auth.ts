@@ -344,7 +344,7 @@ export default class HttpKeyPairAuthorizer {
           value = false
         } else {
           const numericValue: number = parseFloat(value);
-          if (!Number.isNaN(numericValue)) {
+          if (numericValue != NaN) {
             value = numericValue
           }
         }
