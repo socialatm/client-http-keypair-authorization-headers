@@ -39,7 +39,7 @@
     "@types/chai": "^4.2.14",
     "@types/mocha": "^8.2.0",
     "deep-equal-in-any-order": "^1.0.28",
-    "minify": "^6.0.1",
+    "minify": "^8.0.4",
     "ts-node": "^10.9.2",
     "typescript": "^4.1.3"
   },
