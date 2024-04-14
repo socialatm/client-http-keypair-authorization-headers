@@ -138,7 +138,7 @@ generateKeyPair('rsa', {
 
 Of course there are many algorithms that can be used to generate a key pair. This example creates an ECDSA-P256 key pair which can be extracted (necessary for saving and sharing) and can be used to both sign and verify signatures (necessary for authorization).
 ```js
-var crypto = window.crypto || window.msCrypto
+var crypto = window.crypto
 
 var keyPair = await crypto.subtle.generateKey(
   {
@@ -163,8 +163,8 @@ const publicKeyPem = publicKey.export({
     format: 'pem'
 })
 
-// export a public key, for storing locally
-const publicKeyPem = privateKey.export({
+// export a private key, for storing locally
+const privateKeyPem = privateKey.export({
     type: 'pkcs1',
     format: 'pem',
 })
@@ -178,7 +178,7 @@ var publicKeyPem = HttpKeyPairAuthorizer.exportPublicKeyToPemString(
   keyPair.publicKey,
 )
 
-// export a public key, for storing locally
+// export a private key, for storing locally
 var privateKeyPem = HttpKeyPairAuthorizer.exportPrivateKeyToPemString(
   keyPair.privateKey,
 )
